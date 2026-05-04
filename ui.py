@@ -516,40 +516,68 @@ def draw_augment_card(game, rect, index, augment_id, data, current_stack, hovere
 # 캠페인 스테이지 선택 화면을 그립니다.
 # 잠긴 스테이지는 어둡게 보이고, 열린 스테이지를 클릭/선택하면 브리핑 화면으로 넘어갑니다.
 def draw_stage_select(game, draw_sea_background):
-    # stage_select_background.png가 있으면 선택 화면 전용 배경으로 사용합니다.
-    stage_select_background = assets.get_stage_select_image(game, "background")
-    if stage_select_background:
-        layout.draw_cover(game, stage_select_background)
+    # 배경.png → stage_select_background.png → 바다 배경 순서로 사용합니다.
+    bg = game.images.get("배경")
+    if bg:
+        layout.draw_cover(game, bg)
     else:
-        draw_sea_background(game)
+        fallback_bg = assets.get_stage_select_image(game, "background")
+        if fallback_bg:
+            layout.draw_cover(game, fallback_bg)
+        else:
+            draw_sea_background(game)
 
-    # 바다 배경 위에 살짝 어두운 막을 깔아 카드와 글자가 잘 보이게 합니다.
-    shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
-    shade.fill((0, 0, 0, 118))
-    game.screen.blit(shade, (0, 0))
-
-    # stage_select_panel.png는 나중에 전체 선택창 디자인 이미지를 얹고 싶을 때 쓰는 예비 칸입니다.
-    stage_select_panel = assets.get_stage_select_image(game, "panel")
-    if stage_select_panel:
-        layout.draw_cover(game, stage_select_panel)
-
-    title_y = max(42, int(game.pad_height * 0.1))
-    draw_text(game, "해전 선택", 44 if game.pad_width >= 720 else 34, WHITE, game.pad_width // 2, title_y, True, True)
-    progress = f"진행도 {campaign.get_cleared_stage_count(game)}/{len(story.STAGE_STORIES)}"
-    draw_text(game, progress, 18, YELLOW, game.pad_width // 2, title_y + 48, True, True)
-
-    rects = layout.get_stage_select_card_rects(game, len(story.STAGE_STORIES))
-    selected_index = getattr(game, "stage_select_index", 0)
+    stage_count = len(story.STAGE_STORIES)
+    rects = layout.get_stage_select_card_rects(game, stage_count)
     mouse_pos = pygame.mouse.get_pos()
+    keyboard_index = getattr(game, "stage_select_index", 0)
 
+    # 마우스가 카드 위에 있으면 그 카드가 포커스 됩니다. 아니면 방향키 선택을 씁니다.
+    focused_index = keyboard_index
+    for i, rect in enumerate(rects):
+        if rect.collidepoint(mouse_pos):
+            focused_index = i
+            break
+
+    # 카드 이미지를 각 위치에 그립니다.
+    # - 포커스된 스테이지(완료 포함): 출전준비_n
+    # - 완료됐지만 포커스 아님: 완료_n
+    # - 잠긴 스테이지: 어두운 플레이스홀더
     for index, rect in enumerate(rects):
-        data = story.STAGE_STORIES[index]
         unlocked = campaign.is_stage_unlocked(game, index)
         cleared = campaign.is_stage_cleared(game, index)
-        selected = index == selected_index
-        hovered = rect.collidepoint(mouse_pos)
-        draw_stage_card(game, rect, index, data, unlocked, cleared, selected, hovered)
+        focused = index == focused_index
 
+        if not unlocked:
+            card_img = game.images.get(f"잘금_{index + 1}")
+        elif focused:
+            # 1번 파일명은 언더스코어 없이 저장되어 있어 두 키를 모두 시도합니다.
+            card_img = (
+                game.images.get(f"출전 준비_{index + 1}")
+                or game.images.get(f"출전 준비{index + 1}")
+                or game.images.get(f"완료_{index + 1}")
+            )
+        elif cleared:
+            card_img = game.images.get(f"완료_{index + 1}")
+        else:
+            card_img = game.images.get(f"출전 준비_{index + 1}")
+
+        if card_img:
+            draw_image_cover_in_rect(game, card_img, rect)
+        else:
+            # 잠긴 스테이지: 어두운 플레이스홀더를 그립니다.
+            locked_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+            locked_surf.fill((12, 14, 18, 210))
+            game.screen.blit(locked_surf, rect)
+            pygame.draw.rect(game.screen, (70, 74, 86), rect, 1, border_radius=6)
+
+    # 하단 글귀 이미지: 포커스된 스테이지의 글귀_n을 표시합니다.
+    quote_img = game.images.get(f"글귀_{focused_index + 1}")
+    if quote_img:
+        quote_rect = layout.get_stage_select_quote_rect(game)
+        draw_image_contain_in_rect(game, quote_img, quote_rect)
+
+    # 잠긴 스테이지를 선택하려 할 때 안내 메시지를 표시합니다.
     if game.message_timer > 0 and game.message_text:
         message_rect = pygame.Rect(0, 0, min(720, int(game.pad_width * 0.84)), 46)
         message_rect.center = (game.pad_width // 2, game.pad_height - 64)
@@ -561,62 +589,10 @@ def draw_stage_select(game, draw_sea_background):
 
 
 # 스테이지 선택 화면의 카드 하나를 그립니다.
-# unlocked/cleared/selected 값을 색과 문구로 바꿔서 상태를 한눈에 볼 수 있게 합니다.
+# 이미지 기반 UI로 전환했으므로 이 함수는 draw_stage_select 내부에서 직접 처리하며,
+# 하위 호환이 필요한 경우에만 호출할 수 있도록 남겨 둡니다.
 def draw_stage_card(game, rect, index, data, unlocked, cleared, selected, hovered):
-    if unlocked:
-        fill = (29, 43, 57, 226) if not hovered else (39, 56, 74, 236)
-        border = (255, 213, 92) if selected else (172, 141, 81)
-        title_color = WHITE
-        sub_color = GRAY
-        status = "완료" if cleared else "출전 가능"
-        status_color = GREEN if cleared else YELLOW
-    else:
-        fill = (18, 20, 24, 218)
-        border = (91, 94, 104) if not selected else RED
-        title_color = (128, 132, 145)
-        sub_color = (104, 108, 119)
-        status = "잠김"
-        status_color = RED
-
-    card = pygame.Surface(rect.size, pygame.SRCALPHA)
-    card.fill(fill)
-    game.screen.blit(card, rect)
-    pygame.draw.rect(game.screen, border, rect, 3 if selected else 1, border_radius=8)
-
-    # stage_select_stage1.png 같은 카드 전용 이미지가 있으면 카드 상단 썸네일로 사용합니다.
-    card_image = assets.get_stage_select_image(game, "card", index)
-    thumbnail_rect = pygame.Rect(rect.left + 10, rect.top + 10, rect.width - 20, max(42, int(rect.height * 0.34)))
-    if card_image:
-        draw_image_cover_in_rect(game, card_image, thumbnail_rect)
-        tint = pygame.Surface(thumbnail_rect.size, pygame.SRCALPHA)
-        tint.fill((0, 0, 0, 68 if unlocked else 150))
-        game.screen.blit(tint, thumbnail_rect)
-        pygame.draw.rect(game.screen, border, thumbnail_rect, 1, border_radius=6)
-
-    inner_x = rect.left + 18
-    y = thumbnail_rect.bottom + 12 if card_image else rect.top + 18
-    draw_text(game, f"{index + 1}단계", 18, status_color, inner_x, y, False, True)
-    draw_text(game, status, 15, status_color, rect.right - 74, y + 1, False, True)
-    y += 36
-
-    title_font_size = 24 if rect.width >= 200 else 21
-    draw_text(game, data["title"], title_font_size, title_color, inner_x, y, False, True)
-    y += 34
-    date_rect = pygame.Rect(inner_x, y, rect.width - 36, 44)
-    draw_wrapped_text(game, data["date"], 15, sub_color, date_rect, 2, True)
-
-    footer_y = rect.bottom - 44
-    if unlocked:
-        footer = "선택 후 Enter"
-    else:
-        footer = "이전 해전 클리어 필요"
-    draw_text(game, footer, 14, sub_color, inner_x, footer_y, False, True)
-
-    # 잠긴 카드는 자물쇠 느낌의 작은 사각 아이콘을 그립니다.
-    if not unlocked:
-        lock_rect = pygame.Rect(rect.centerx - 12, rect.bottom - 74, 24, 18)
-        pygame.draw.rect(game.screen, (93, 96, 108), lock_rect, border_radius=4)
-        pygame.draw.arc(game.screen, (93, 96, 108), (lock_rect.left + 3, lock_rect.top - 13, 18, 22), 3.14, 6.28, 3)
+    pass
 
 
 # 난중일기/해전 브리핑 화면을 그립니다.

@@ -51,8 +51,23 @@ def handle_event(game, event):
         handle_key_up(game, event)
         return
 
+    if event.type == pygame.MOUSEMOTION:
+        handle_mouse_motion(game, event.pos)
+        return
+
     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
         handle_mouse_down(game, event.pos)
+
+
+# 마우스가 움직일 때 스테이지 선택 화면에서 포커스 인덱스를 갱신합니다.
+# 잠겼 스테이지는 포커스를 주지 않습니다.
+def handle_mouse_motion(game, pos):
+    if game.game_state == "stage_select":
+        import campaign as _campaign
+        for stage_index, rect in enumerate(layout.get_stage_select_card_rects(game, STAGE_MAX)):
+            if rect.collidepoint(pos) and _campaign.is_stage_unlocked(game, stage_index):
+                game.stage_select_index = stage_index
+                break
 
 
 # 선택지 화면에서 방향키로 현재 선택 카드를 움직입니다.
@@ -189,21 +204,37 @@ def handle_key_down(game, event):
             return
 
         if pygame.K_1 <= event.key <= pygame.K_5:
-            assets.play_stage_sound(game, "shoot", 0.45)
-            actors.start_stage(game, event.key - pygame.K_1)
+            stage_idx = event.key - pygame.K_1
+            import campaign as _campaign
+            if _campaign.is_stage_unlocked(game, stage_idx):
+                assets.play_stage_sound(game, "shoot", 0.45)
+                actors.start_stage(game, stage_idx)
             return
 
         if event.key in (pygame.K_LEFT, pygame.K_UP, pygame.K_a, pygame.K_w):
-            game.stage_select_index = max(0, getattr(game, "stage_select_index", 0) - 1)
+            import campaign as _campaign
+            cur = getattr(game, "stage_select_index", 0)
+            for i in range(cur - 1, -1, -1):
+                if _campaign.is_stage_unlocked(game, i):
+                    game.stage_select_index = i
+                    break
             return
 
         if event.key in (pygame.K_RIGHT, pygame.K_DOWN, pygame.K_d, pygame.K_s):
-            game.stage_select_index = min(STAGE_MAX - 1, getattr(game, "stage_select_index", 0) + 1)
+            import campaign as _campaign
+            cur = getattr(game, "stage_select_index", 0)
+            for i in range(cur + 1, STAGE_MAX):
+                if _campaign.is_stage_unlocked(game, i):
+                    game.stage_select_index = i
+                    break
             return
 
         if event.key == pygame.K_RETURN:
-            assets.play_stage_sound(game, "shoot", 0.45)
-            actors.start_stage(game, getattr(game, "stage_select_index", 0))
+            import campaign as _campaign
+            idx = getattr(game, "stage_select_index", 0)
+            if _campaign.is_stage_unlocked(game, idx):
+                assets.play_stage_sound(game, "shoot", 0.45)
+                actors.start_stage(game, idx)
             return
 
         return
@@ -332,12 +363,14 @@ def handle_mouse_down(game, pos):
         return
 
     if game.game_state == "stage_select":
-        # 스테이지 카드 안을 클릭하면 해당 스테이지를 선택하고, 열려 있으면 시작합니다.
+        # 스테이지 카드 안을 클릭하면 해당 스테이지를 선택하고, 해금된 스테이지이면 시작합니다.
+        import campaign as _campaign
         for stage_index, rect in enumerate(layout.get_stage_select_card_rects(game, STAGE_MAX)):
             if rect.collidepoint(pos):
-                assets.play_stage_sound(game, "shoot", 0.45)
-                game.stage_select_index = stage_index
-                actors.start_stage(game, stage_index)
+                if _campaign.is_stage_unlocked(game, stage_index):
+                    assets.play_stage_sound(game, "shoot", 0.45)
+                    game.stage_select_index = stage_index
+                    actors.start_stage(game, stage_index)
                 break
         return
 

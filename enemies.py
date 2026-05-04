@@ -30,7 +30,7 @@ ENEMY_STAGES = [
         "enemy_shot_interval": (2.7, 4.2),
         "enemy_projectile_damage": 3,
         "enemy_projectile_radius": 5,
-        "enemy_projectile_speed": 135,
+        "enemy_projectile_speed": 405,
     },
     {
         "enemy_hp": 34,
@@ -44,7 +44,7 @@ ENEMY_STAGES = [
         "enemy_shot_interval": (1.45, 2.35),
         "enemy_projectile_damage": 5,
         "enemy_projectile_radius": 7,
-        "enemy_projectile_speed": 175,
+        "enemy_projectile_speed": 525,
     },
     {
         "enemy_hp": 45,
@@ -64,7 +64,7 @@ ENEMY_STAGES = [
         "enemy_shot_interval": (1.2, 2.1),
         "enemy_projectile_damage": 8,
         "enemy_projectile_radius": 7,
-        "enemy_projectile_speed": 205,
+        "enemy_projectile_speed": 615,
     },
     {
         "enemy_hp": 78,
@@ -77,7 +77,7 @@ ENEMY_STAGES = [
         "enemy_shot_interval": (1.15, 2.0),
         "enemy_projectile_damage": 10,
         "enemy_projectile_radius": 7,
-        "enemy_projectile_speed": 210,
+        "enemy_projectile_speed": 630,
         "suicide_chance": 0.46,
         "suicide_damage": 68,
         "suicide_speed_multiplier": 1.4,

@@ -205,38 +205,64 @@ def get_basic_ability_choice_rects(game, choice_count):
 # 스테이지 선택 화면의 카드 위치를 계산합니다.
 # 입력 처리(input.py)와 화면 그리기(ui.py)가 같은 위치를 써야 클릭 판정이 정확합니다.
 def get_stage_select_card_rects(game, stage_count):
-    # 큰 화면에서는 5개 스테이지를 한 줄에 보여주고,
-    # 좁은 화면에서는 1~2열로 자동 배치해서 글자가 겹치지 않게 합니다.
-    if game.pad_width >= 1100:
+    # 하단 글귀 이미지 영역을 먼저 확보합니다.
+    quote_height = get_stage_select_quote_height(game)
+    available_height = game.pad_height - quote_height
+
+    # 카드는 항상 5개를 한 줄로 표시하고, 창이 좁으면 2열/1열로 줄입니다.
+    if game.pad_width >= 900:
         columns = min(stage_count, 5)
-    elif game.pad_width >= 720:
+    elif game.pad_width >= 560:
         columns = 2
     else:
         columns = 1
 
-    gap = 16
-    content_width = min(1160, int(game.pad_width * 0.86))
-    card_width = max(160, (content_width - gap * (columns - 1)) // columns)
-    card_height = 188 if game.pad_height >= 720 else 154
+    # 양쪽 끝단과의 여백 (화면 폭의 8%, 최소 64px)
+    side_margin = max(64, int(game.pad_width * 0.08))
+    gap_x = max(10, int(game.pad_width * 0.012))
+    gap_y = 12
+
+    # 카드 상단 여백: 사용 가능 높이의 30% 아래에서 시작합니다.
+    top_margin = max(100, int(available_height * 0.30))
+
+    content_width = game.pad_width - side_margin * 2
+    card_width = (content_width - gap_x * (columns - 1)) // columns
+
     rows = (stage_count + columns - 1) // columns
-    total_width = card_width * columns + gap * (columns - 1)
-    total_height = card_height * rows + gap * (rows - 1)
+    # 카드 높이: 남은 공간을 채우되 72% 이하로 제한합니다.
+    card_height = min(
+        max(130, int((available_height - top_margin - gap_y * (rows - 1)) // rows)),
+        int(available_height * 0.72),
+    )
+
+    total_width = card_width * columns + gap_x * (columns - 1)
     start_x = (game.pad_width - total_width) // 2
-    start_y = max(int(game.pad_height * 0.28), (game.pad_height - total_height) // 2)
+    start_y = top_margin
 
     rects = []
     for index in range(stage_count):
         col = index % columns
         row = index // columns
         rect = pygame.Rect(
-            start_x + col * (card_width + gap),
-            start_y + row * (card_height + gap),
+            start_x + col * (card_width + gap_x),
+            start_y + row * (card_height + gap_y),
             card_width,
             card_height,
         )
         rects.append(rect)
 
     return rects
+
+
+def get_stage_select_quote_height(game):
+    # 글귀 이미지가 차지할 화면 하단 높이입니다.
+    return min(280, max(140, int(game.pad_height * 0.24)))
+
+
+def get_stage_select_quote_rect(game):
+    # 화면 하단에 글귀 이미지를 표시할 영역을 반환합니다.
+    h = get_stage_select_quote_height(game)
+    return pygame.Rect(0, game.pad_height - h, game.pad_width, h)
 
 
 # 일시정지 메뉴의 중앙 패널과 버튼 위치를 계산합니다.
