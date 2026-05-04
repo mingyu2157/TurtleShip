@@ -12,7 +12,7 @@
 #   get_stage_image()/play_stage_sound()가 현재 스테이지에 맞는 파일을 골라줍니다.
 import pygame
 
-from settings import AUDIO_DIR, AUDIO_EXTENSIONS, IMAGE_DIR, IMAGE_EXTENSIONS
+from settings import AUDIO_DIR, AUDIO_EXTENSIONS, BASE_DIR, IMAGE_DIR, IMAGE_EXTENSIONS
 from skins import (
     ALLY_IMAGE_NAMES,
     COMMON_IMAGE_NAMES,
@@ -27,6 +27,18 @@ from stages import STAGE_MAX
 # 이미지 확대/축소 캐시에 보관할 최대 개수입니다.
 # 너무 많이 보관하면 메모리를 많이 쓰므로, 일정 개수를 넘으면 한 번 비웁니다.
 MAX_SCALED_IMAGE_CACHE = 280
+
+# 과거 프로젝트 폴더 구조(sound effect/)도 자동으로 읽어오도록 검색 폴더를 둘 다 유지합니다.
+AUDIO_SEARCH_DIRS = (AUDIO_DIR, BASE_DIR / "sound effect")
+
+# 영어 키 이름과 실제 파일 이름이 다를 수 있어 별칭 목록을 둡니다.
+# 예: typing 키는 typing.mp3 또는 타이핑.mp3를 모두 허용합니다.
+SOUND_NAME_ALIASES = {
+    "typing": ("typing", "타이핑"),
+}
+
+# 스토리 타자음은 전용 채널 하나를 루프 재생해서 자연스럽게 들리게 합니다.
+STORY_TYPING_CHANNEL_INDEX = 14
 
 
 # 같은 이미지를 같은 크기로 계속 smoothscale()하지 않도록 캐시에서 꺼내는 함수입니다.
@@ -81,6 +93,15 @@ def find_asset(folder, names, extensions):
     return None
 
 
+# 여러 폴더를 순서대로 돌며 실제 존재하는 파일을 찾습니다.
+def find_asset_in_folders(folders, names, extensions):
+    for folder in folders:
+        path = find_asset(folder, names, extensions)
+        if path:
+            return path
+    return None
+
+
 # 게임 시작 시 이미지와 효과음을 한 번에 불러옵니다.
 # 불러온 이미지는 images 딕셔너리, 효과음은 sounds 딕셔너리에 저장됩니다.
 def load_assets():
@@ -108,7 +129,7 @@ def load_assets():
         pygame.mixer.set_num_channels(64)
         # 앞쪽 14개 채널은 중요한 효과음 전용으로 예약합니다.
         # 대포처럼 자주 나는 소리는 여러 채널을 돌려 써서 앞 소리를 덜 자릅니다.
-        pygame.mixer.set_reserved(14)
+        pygame.mixer.set_reserved(15)
         audio_enabled = True
     except pygame.error:
         audio_enabled = False
@@ -120,7 +141,8 @@ def load_assets():
     # 효과음도 이미지와 같은 방식으로 이름 목록을 돌며 불러옵니다.
     sound_names = COMMON_SOUND_NAMES + stage_sound_names(STAGE_MAX)
     for name in sound_names:
-        path = find_asset(AUDIO_DIR, [name], AUDIO_EXTENSIONS)
+        candidate_names = SOUND_NAME_ALIASES.get(name, (name,))
+        path = find_asset_in_folders(AUDIO_SEARCH_DIRS, candidate_names, AUDIO_EXTENSIONS)
         if not path:
             continue
         try:
@@ -195,7 +217,7 @@ def play_named_music(game, names, music_key, volume):
         return
 
     # 여러 이름 후보 중 실제 존재하는 파일을 찾습니다.
-    path = find_asset(AUDIO_DIR, names, AUDIO_EXTENSIONS)
+    path = find_asset_in_folders(AUDIO_SEARCH_DIRS, names, AUDIO_EXTENSIONS)
     if not path:
         # 해당 화면 전용 음악이 없으면 이전 전투 음악이 계속 흐르지 않도록 멈춥니다.
         stop_music(game)
@@ -293,6 +315,33 @@ def play_stage_sound(game, kind, volume=0.65):
     sound = game.sounds.get(stage_key) or game.sounds.get(kind)
     # kind가 shoot이면 전용 대포 채널을 쓰므로, 빠른 발사 중에도 소리가 안정적으로 납니다.
     play_loaded_sound(game, sound, volume, kind)
+
+
+# 스토리 타자 애니메이션 중 타이핑 효과음을 켜거나 끕니다.
+# enabled=True면 루프 재생, False면 즉시 정지합니다.
+def set_story_typing_sound_enabled(game, enabled):
+    if not getattr(game, "audio_enabled", False):
+        return
+
+    try:
+        channel = pygame.mixer.Channel(STORY_TYPING_CHANNEL_INDEX)
+    except pygame.error:
+        return
+
+    if not enabled:
+        if getattr(game, "story_typing_sound_active", False):
+            channel.stop()
+            game.story_typing_sound_active = False
+        return
+
+    sound = game.sounds.get("typing")
+    if sound is None:
+        return
+
+    if not getattr(game, "story_typing_sound_active", False) or not channel.get_busy():
+        sound.set_volume(0.26)
+        channel.play(sound, loops=-1)
+        game.story_typing_sound_active = True
 
 
 # 현재 스테이지에 맞는 이미지를 가져옵니다.

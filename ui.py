@@ -653,6 +653,11 @@ def draw_story(game, draw_sea_background):
     y += 34
 
     visible_blocks = get_visible_story_blocks(game, data)
+    has_typing_text = any(get_story_typing_blocks(data))
+    assets.set_story_typing_sound_enabled(
+        game,
+        has_typing_text and not getattr(game, "story_typing_complete", True),
+    )
     visible_quote = visible_blocks[0] if visible_blocks else ""
     visible_lines = visible_blocks[1:] if len(visible_blocks) > 1 else []
 

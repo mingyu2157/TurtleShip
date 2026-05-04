@@ -30,6 +30,9 @@ from stages import get_stage_boss_name, get_stage_display_name, get_stage_trait
 # menu면 메뉴, play면 게임 화면, gameover/clear면 결과 화면을 보여줍니다.
 def draw_screen(game):
     # game_state 하나로 현재 화면 전체를 결정합니다.
+    if game.game_state != "story":
+        assets.set_story_typing_sound_enabled(game, False)
+
     if game.game_state == "menu":
         ui.draw_menu(game, draw_sea_background)
     elif game.game_state == "stage_select":

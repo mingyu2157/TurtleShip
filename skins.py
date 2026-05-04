@@ -113,6 +113,7 @@ COMMON_SOUND_NAMES = [
     "destroy",
     "skill",
     "ultimate",
+    "typing",
 ]
 
 
