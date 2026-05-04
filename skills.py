@@ -30,26 +30,37 @@ ULTIMATE_MAX = 100
 ULTIMATE_SCANCODES = {8, 224, 228}
 ULTIMATE_KEYS = {pygame.K_e, pygame.K_LCTRL, pygame.K_RCTRL}
 
-# 4단계부터 한 번 발동 가능한 생존 패시브입니다.
+# 4단계 명량해전 생존 패시브 설정입니다.
 LAST_STAND_STAGE_INDEX = 3
-LAST_STAND_HEAL_RATIO = 0.10
-LAST_STAND_INVINCIBLE_SECONDS = 2.5
-LAST_STAND_DAMAGE_SECONDS = 8.0
-LAST_STAND_DAMAGE_MULTIPLIER = 10.0
-LAST_STAND_REVIVE_CHANCE = 0.35
-LAST_STAND_REVIVE_RATIO = 0.42
+# 필생즉사(damage): 체력 20% 이하에서 발동, 공격력 250%, 받는 피해 50%, 지속 6초, 쿨타임 60초
+LAST_STAND_TRIGGER_RATIO = 0.20
+LAST_STAND_DAMAGE_SECONDS = 6.0
+LAST_STAND_DAMAGE_MULTIPLIER = 2.5
+LAST_STAND_DAMAGE_REDUCTION = 0.5
+LAST_STAND_DAMAGE_COOLDOWN = 20.0
+# 필사즉생(revive): 사망 시 1회 부활, 최대 체력 35% 회복, 3초 무적, 공격력 -20%, 쿨타임 180초
+LAST_STAND_REVIVE_RATIO = 0.35
+LAST_STAND_INVINCIBLE_SECONDS = 3.0
+LAST_STAND_REVIVE_COOLDOWN = 60.0
+LAST_STAND_REVIVE_PENALTY = 0.20
+LAST_STAND_REVIVE_PENALTY_SECONDS = 60.0
+# 발동 직후 순간 피격 방지를 위한 짧은 무적 시간입니다 (필생즉사 전용).
+LAST_STAND_DAMAGE_TRIGGER_INVINCIBLE = 1.5
 
 # 명량해전 직전 스토리 뒤에 플레이어가 고를 수 있는 생즉사 사즉생 선택지입니다.
+# image_key는 선택 화면에서 카드 이미지로 쓸 파일 이름입니다 (live.png / die.png).
 LAST_STAND_CHOICES = [
     {
-        "id": "damage",
+        "id": "revive",
+        "image_key": "live",
         "title": "죽고자 하면 살 것이다",
-        "description": "체력 10% 이하에서 1회 발동. 잠깐 무적 + 8초 동안 공격력 10배.",
+        "description": "사망 시 부활. 체력 35% 회복, 3초 무적, 공격력 -20%, 쿨타임 180초.",
     },
     {
-        "id": "revive",
+        "id": "damage",
+        "image_key": "die",
         "title": "살고자 하면 죽는다",
-        "description": "체력 0이 될 때 35% 확률로 1회 부활. 성공 시 체력 42% 회복.",
+        "description": "체력 20% 이하에서 발동. 공격력 250%, 피해 50%, 6초 지속, 쿨타임 60초.",
     },
 ]
 
@@ -57,7 +68,7 @@ LAST_STAND_CHOICES = [
 HAKIKJIN_SCANCODES = {20}
 HAKIKJIN_KEYS = {pygame.K_q}
 HAKIKJIN_DURATION = 5.0
-HAKIKJIN_COOLDOWN = 14.0
+HAKIKJIN_COOLDOWN = 30.0
 HAKIKJIN_SHIP_COUNT = 12
 HAKIKJIN_FIRE_INTERVAL = 0.22
 HAKIKJIN_SHIP_SIZE = (34, 92)
@@ -66,13 +77,13 @@ HAKIKJIN_SHIP_SIZE = (34, 92)
 TANKER_SCANCODES = {29}
 TANKER_KEYS = {pygame.K_z}
 TANKER_DURATION = 4.0
-TANKER_COOLDOWN = 10.0
+TANKER_COOLDOWN = 20.0
 
 # 치유는 X/ㅌ 키로 발동합니다.
 HEALER_SCANCODES = {27}
 HEALER_KEYS = {pygame.K_x}
 HEALER_DURATION = 5.0
-HEALER_COOLDOWN = 14.0
+HEALER_COOLDOWN = 20.0
 HEALER_HEAL_PER_SECOND = 18.0
 
 
@@ -225,9 +236,18 @@ def try_use_healer(game):
 def update_skills(game, dt):
     game.ultimate_invincible_timer = max(0, getattr(game, "ultimate_invincible_timer", 0) - dt)
     game.stage_handicap_timer = max(0, getattr(game, "stage_handicap_timer", 0) - dt)
+    # 필생즉사 버프 타이머
     game.last_stand_damage_timer = max(0, getattr(game, "last_stand_damage_timer", 0) - dt)
     if getattr(game, "last_stand_damage_timer", 0) <= 0:
         game.last_stand_damage_multiplier = 1.0
+        game.last_stand_damage_active = False
+    # 필생즉사/필사즉생 쿨타임
+    game.last_stand_damage_cooldown = max(0, getattr(game, "last_stand_damage_cooldown", 0) - dt)
+    game.last_stand_revive_cooldown = max(0, getattr(game, "last_stand_revive_cooldown", 0) - dt)
+    # 필사즉생 공격력 패널티 타이머
+    game.last_stand_revive_penalty_timer = max(0, getattr(game, "last_stand_revive_penalty_timer", 0) - dt)
+    # 부활 플래시 타이머
+    game.revive_flash_timer = max(0, getattr(game, "revive_flash_timer", 0) - dt)
     game.hakikjin_timer = max(0, getattr(game, "hakikjin_timer", 0) - dt)
     game.hakikjin_cooldown = max(0, getattr(game, "hakikjin_cooldown", 0) - dt)
     game.tanker_guard_timer = max(0, getattr(game, "tanker_guard_timer", 0) - dt)
@@ -238,6 +258,18 @@ def update_skills(game, dt):
     update_hakikjin_ships(game, dt)
     update_tanker_guard(game)
     update_healer_effect(game, dt)
+    apply_passive_repair(game, dt)
+
+
+# 랜덤 기본 능력 "상시 수리 인력"이 있으면 전투 중 계속 체력을 조금씩 회복합니다.
+def apply_passive_repair(game, dt):
+    if not getattr(game, "player", None):
+        return
+    heal_per_second = getattr(game, "augment_passive_heal_per_second", 0.0)
+    if heal_per_second <= 0:
+        return
+    max_hp = game.player.get("maxHp", 0)
+    game.player["hp"] = min(max_hp, game.player.get("hp", max_hp) + heal_per_second * dt)
 
 
 # 학익진 진형선 12척을 현재 전투 영역에 배치합니다.
@@ -291,13 +323,14 @@ def fire_hakikjin_bullet(game, ship):
     dy = target_y - ship["rect"].centery
     length = max(1, math.sqrt(dx * dx + dy * dy))
     stage = game.current_stage()
+    damage = 10 * getattr(game, "augment_allied_attack_multiplier", 1.0)
     projectiles.make_player_bullet(
         game,
         ship["rect"].centerx,
         ship["rect"].centery,
         dx / length * 820,
         dy / length * 820,
-        52,
+        max(1, damage),
         5,
         stage["bullet_color"],
         image_padding=4,
@@ -350,43 +383,56 @@ def update_healer_effect(game, dt):
     game.player["hp"] = min(max_hp, game.player.get("hp", max_hp) + heal * dt)
 
 
-# 4단계부터 한 번만 발동하는 생존 이벤트입니다.
+# 4단계 생존 패시브를 발동합니다.
+# damage(필생즉사): 체력 20% 이하 시 쿨타임 기반으로 반복 발동
+# revive(필사즉생): 사망 시 쿨타임 기반으로 부활
 def try_use_last_stand(game):
     if getattr(game, "stage_index", 0) < LAST_STAND_STAGE_INDEX:
-        return False
-    if getattr(game, "last_stand_used", False):
         return False
     max_hp = game.player.get("maxHp", 0)
     if max_hp <= 0:
         return False
 
     choice = getattr(game, "last_stand_choice", "damage")
+    # 구버전(카드-효과 매핑이 뒤바뀐 상태)에서 저장된 선택값을 1회 자동 보정합니다.
+    if getattr(game, "last_stand_choice_version", 0) < 2:
+        if choice == "damage":
+            choice = "revive"
+        elif choice == "revive":
+            choice = "damage"
+        game.last_stand_choice = choice
+        game.last_stand_choice_version = 2
+
     if choice == "revive":
-        # 부활 선택지는 체력이 완전히 0이 되었을 때만 판정합니다.
-        # 10% 이하에서 자동으로 공격력 버프가 켜지는 공격형 선택지와 역할을 분리합니다.
+        # 필사즉생: 체력이 0이 되었을 때만 부활 판정합니다.
         if game.player.get("hp", 0) > 0:
             return False
-        game.last_stand_used = True
+        if getattr(game, "last_stand_revive_cooldown", 0) > 0:
+            return False
+        # 쿨타임 내에 있으면 부활 불가
+        game.player["hp"] = max(1, int(max_hp * LAST_STAND_REVIVE_RATIO))
+        game.ultimate_invincible_timer = max(getattr(game, "ultimate_invincible_timer", 0), LAST_STAND_INVINCIBLE_SECONDS)
+        game.last_stand_revive_cooldown = LAST_STAND_REVIVE_COOLDOWN
+        game.last_stand_revive_penalty_timer = LAST_STAND_REVIVE_PENALTY_SECONDS
         results.record_skill_use(game, "last_stand")
-        if random.random() <= LAST_STAND_REVIVE_CHANCE:
-            game.player["hp"] = max(1, int(max_hp * LAST_STAND_REVIVE_RATIO))
-            game.ultimate_invincible_timer = max(getattr(game, "ultimate_invincible_timer", 0), LAST_STAND_INVINCIBLE_SECONDS)
-            game.message_text = "생즉사 사즉생: 부활"
-            game.message_timer = 2.0
-            assets.play_sound(game, "ultimate", 0.75)
-            return True
-        game.message_text = "생즉사 사즉생 실패"
-        game.message_timer = 1.4
-        return False
+        game.message_text = "필사즉생: 부활! (공격력 -20%, 3초 무적)"
+        game.message_timer = 2.5
+        assets.play_sound(game, "ultimate", 0.75)
+        return True
 
-    game.last_stand_used = True
-    results.record_skill_use(game, "last_stand")
-    game.player["hp"] = max(1, int(max_hp * LAST_STAND_HEAL_RATIO))
-    game.ultimate_invincible_timer = max(getattr(game, "ultimate_invincible_timer", 0), LAST_STAND_INVINCIBLE_SECONDS)
+    # 필생즉사: 체력 20% 이하에서 쿨타임이 없으면 발동합니다.
+    if game.player.get("hp", 1) <= 0:
+        return False
+    if getattr(game, "last_stand_damage_cooldown", 0) > 0:
+        return False
+    game.ultimate_invincible_timer = max(getattr(game, "ultimate_invincible_timer", 0), LAST_STAND_DAMAGE_TRIGGER_INVINCIBLE)
     game.last_stand_damage_timer = LAST_STAND_DAMAGE_SECONDS
     game.last_stand_damage_multiplier = LAST_STAND_DAMAGE_MULTIPLIER
-    game.message_text = "생즉사 사즉생"
-    game.message_timer = 2.0
+    game.last_stand_damage_active = True
+    game.last_stand_damage_cooldown = LAST_STAND_DAMAGE_COOLDOWN
+    results.record_skill_use(game, "last_stand")
+    game.message_text = "필생즉사: 공격력 250%, 피해 50% (6초)"
+    game.message_timer = 2.5
     assets.play_sound(game, "ultimate", 0.75)
     return True
 

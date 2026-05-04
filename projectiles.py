@@ -29,6 +29,8 @@ def make_player_bullet(game, x, y, vx, vy, damage, radius, color, image_padding=
         {
             "x": float(x),
             "y": float(y),
+            "prev_x": float(x),
+            "prev_y": float(y),
             "vx": float(vx),
             "vy": float(vy),
             "damage": float(damage),
@@ -48,6 +50,8 @@ def update_player_bullets(game, dt):
     remove_area = layout.get_play_area(game).inflate(320, 140)
     for bullet in game.bullets[:]:
         # "현재 위치 = 이전 위치 + 속도 * 시간"은 거의 모든 2D 게임 이동의 기본 공식입니다.
+        bullet["prev_x"] = bullet.get("x", 0.0)
+        bullet["prev_y"] = bullet.get("y", 0.0)
         bullet["x"] += bullet["vx"] * dt
         bullet["y"] += bullet["vy"] * dt
         if not remove_area.colliderect(get_circle_rect(bullet["x"], bullet["y"], bullet["radius"])):
@@ -63,6 +67,8 @@ def make_enemy_projectile(game, x, y, vx, vy, radius, damage, split, color):
         {
             "x": float(x),
             "y": float(y),
+            "prev_x": float(x),
+            "prev_y": float(y),
             "vx": float(vx),
             "vy": float(vy),
             "radius": radius,
@@ -120,6 +126,8 @@ def update_enemy_projectiles(game, dt):
     remove_area = layout.get_play_area(game).inflate(16, 16)
     for projectile in game.enemy_projectiles[:]:
         projectile["age"] += dt
+        projectile["prev_x"] = projectile.get("x", 0.0)
+        projectile["prev_y"] = projectile.get("y", 0.0)
         projectile["x"] += projectile["vx"] * dt
         projectile["y"] += projectile["vy"] * dt
 

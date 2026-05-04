@@ -119,8 +119,20 @@ def reset_stage_run(game):
     game.basic_ability_chosen = False
     game.stage_handicap_timer = 0.0
     game.stage_effect_message = ""
-    game.last_stand_choice = "damage"
-    game.last_stand_choice_made = False
+    # 4스테이지(명량해전)은 필생즉사/필사즉생 선택과 쿨타임 상태를 유지합니다.
+    # 다른 스테이지는 last_stand 상태를 완전히 초기화합니다.
+    is_myeongnyang = getattr(game, "stage_index", 0) == 3
+    if not is_myeongnyang:
+        game.last_stand_choice = "damage"
+        game.last_stand_choice_made = False
+        game.last_stand_damage_cooldown = 0.0
+        game.last_stand_revive_cooldown = 0.0
+        game.last_stand_revive_penalty_timer = 0.0
+    # 활성 버프/상태는 스테이지 시작 시 항상 초기화합니다.
+    game.last_stand_used = False
+    game.last_stand_damage_timer = 0.0
+    game.last_stand_damage_multiplier = 1.0
+    game.last_stand_damage_active = False
     game.shoot_cooldown = 0
     clear_battlefield(game)
     obstacles.reset_obstacles(game)
@@ -268,6 +280,7 @@ def choose_last_stand(game, choice_index):
 
     game.last_stand_choice = choices[choice_index]["id"]
     game.last_stand_choice_made = True
+    game.last_stand_choice_version = 2
     begin_stage(game)
     game.message_text = choices[choice_index]["title"]
     game.message_timer = 1.8
@@ -332,11 +345,11 @@ def start_score_mode(game):
     game.stage_total_kills = 0
     game.basic_ability_choices = []
     game.basic_ability_chosen = False
+    game.basic_ability_augment_id = None
     game.stage_handicap_timer = 0.0
     game.stage_effect_message = ""
     game.last_stand_choice = "damage"
     game.last_stand_choice_made = True
-    game.kill_count = 0
     game.score = 0
     game.enemy_spawn_timer = 0
     game.stage_banner_timer = 2.0
@@ -705,7 +718,8 @@ def get_score_balance_count(game):
 # 캠페인은 기본 체력만 쓰고, 점수 경쟁은 레벨에 따라 조금씩 더 단단해집니다.
 def get_balanced_enemy_hp(game, stage):
     balance = get_score_balance_count(game)
-    return float(stage["enemy_hp"] + balance * stage.get("enemy_hp_per_score_level", 0))
+    base_hp = float(stage["enemy_hp"] + balance * stage.get("enemy_hp_per_score_level", 0))
+    return base_hp * 1.5
 
 
 # 미니보스의 최종 체력과 보호막을 계산합니다.

@@ -93,12 +93,15 @@ def handle_key_down(game, event):
             game.menu_select_index = 1 - getattr(game, "menu_select_index", 0)
             return
         if event.key == pygame.K_1:
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.open_stage_select(game)
             return
         if event.key == pygame.K_2:
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.start_score_mode(game)
             return
         if event.key == pygame.K_RETURN:
+            assets.play_stage_sound(game, "shoot", 0.45)
             if getattr(game, "menu_select_index", 0) == 0:
                 actors.open_stage_select(game)
             else:
@@ -118,9 +121,11 @@ def handle_key_down(game, event):
             move_choice_selection(game, 1, choice_count)
             return
         if event.key == pygame.K_RETURN:
+            assets.play_stage_sound(game, "shoot", 0.45)
             augments.choose_augment(game, getattr(game, "choice_select_index", 0))
             return
         if pygame.K_1 <= event.key <= pygame.K_3:
+            assets.play_stage_sound(game, "shoot", 0.45)
             augments.choose_augment(game, event.key - pygame.K_1)
         return
 
@@ -134,9 +139,11 @@ def handle_key_down(game, event):
             move_choice_selection(game, 1, choice_count)
             return
         if event.key == pygame.K_RETURN:
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.choose_basic_ability(game, getattr(game, "choice_select_index", 0))
             return
         if pygame.K_1 <= event.key <= pygame.K_3:
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.choose_basic_ability(game, event.key - pygame.K_1)
         if event.key == pygame.K_ESCAPE:
             actors.open_stage_select(game)
@@ -153,9 +160,11 @@ def handle_key_down(game, event):
             move_choice_selection(game, 1, choice_count)
             return
         if event.key == pygame.K_RETURN:
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.choose_last_stand(game, getattr(game, "choice_select_index", 0))
             return
         if event.key in (pygame.K_1, pygame.K_2):
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.choose_last_stand(game, event.key - pygame.K_1)
         if event.key == pygame.K_ESCAPE:
             actors.open_stage_select(game)
@@ -170,6 +179,7 @@ def handle_key_down(game, event):
             return
 
         if pygame.K_1 <= event.key <= pygame.K_5:
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.start_stage(game, event.key - pygame.K_1)
             return
 
@@ -182,6 +192,7 @@ def handle_key_down(game, event):
             return
 
         if event.key == pygame.K_RETURN:
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.start_stage(game, getattr(game, "stage_select_index", 0))
             return
 
@@ -199,15 +210,15 @@ def handle_key_down(game, event):
 
     if game.game_state == "stage_result":
         # 결과 화면에서는 Enter 또는 클릭으로만 넘어갑니다. Space는 선택키로 쓰지 않습니다.
-        if event.key == pygame.K_RETURN:
-            actors.close_stage_result(game)
-        if event.key == pygame.K_ESCAPE:
+        if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.close_stage_result(game)
         return
 
     if game.game_state in ("gameover", "clear"):
         # 게임 종료 화면에서도 Space로 자동 선택되지 않게 Enter만 받습니다.
         if event.key == pygame.K_RETURN:
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.open_stage_select(game)
         if event.key == pygame.K_ESCAPE:
             pygame.quit()
@@ -222,6 +233,7 @@ def handle_key_down(game, event):
             game.pause_select_index = (getattr(game, "pause_select_index", 0) + 1) % len(ui.PAUSE_MENU_ITEMS)
             return
         if event.key == pygame.K_RETURN:
+            assets.play_stage_sound(game, "shoot", 0.45)
             activate_pause_menu_item(game, getattr(game, "pause_select_index", 0))
             return
         if event.key in (pygame.K_ESCAPE, pygame.K_p):
@@ -275,14 +287,17 @@ def handle_mouse_down(game, pos):
     if game.game_state == "menu":
         campaign_rect, score_rect = layout.get_menu_button_rects(game)
         if campaign_rect.collidepoint(pos):
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.open_stage_select(game)
         elif score_rect.collidepoint(pos):
+            assets.play_stage_sound(game, "shoot", 0.45)
             actors.start_score_mode(game)
         return
 
     if game.game_state == "augment_select":
         for index, rect in enumerate(layout.get_augment_choice_rects(game, len(getattr(game, "augment_choices", [])))):
             if rect.collidepoint(pos):
+                assets.play_stage_sound(game, "shoot", 0.45)
                 game.choice_select_index = index
                 augments.choose_augment(game, index)
                 break
@@ -291,6 +306,7 @@ def handle_mouse_down(game, pos):
     if game.game_state == "ability_select":
         for index, rect in enumerate(layout.get_basic_ability_choice_rects(game, len(getattr(game, "basic_ability_choices", [])))):
             if rect.collidepoint(pos):
+                assets.play_stage_sound(game, "shoot", 0.45)
                 game.choice_select_index = index
                 actors.choose_basic_ability(game, index)
                 break
@@ -299,6 +315,7 @@ def handle_mouse_down(game, pos):
     if game.game_state == "last_stand_select":
         for index, rect in enumerate(layout.get_augment_choice_rects(game, len(skills.LAST_STAND_CHOICES))):
             if rect.collidepoint(pos):
+                assets.play_stage_sound(game, "shoot", 0.45)
                 game.choice_select_index = index
                 actors.choose_last_stand(game, index)
                 break
@@ -308,6 +325,7 @@ def handle_mouse_down(game, pos):
         # 스테이지 카드 안을 클릭하면 해당 스테이지를 선택하고, 열려 있으면 시작합니다.
         for stage_index, rect in enumerate(layout.get_stage_select_card_rects(game, STAGE_MAX)):
             if rect.collidepoint(pos):
+                assets.play_stage_sound(game, "shoot", 0.45)
                 game.stage_select_index = stage_index
                 actors.start_stage(game, stage_index)
                 break
@@ -319,10 +337,12 @@ def handle_mouse_down(game, pos):
 
     if game.game_state == "stage_result":
         # 결과 화면은 클릭해도 다음 화면으로 넘어가게 합니다.
+        assets.play_stage_sound(game, "shoot", 0.45)
         actors.close_stage_result(game)
         return
 
     if game.game_state in ("gameover", "clear"):
+        assets.play_stage_sound(game, "shoot", 0.45)
         actors.open_stage_select(game)
         return
 
@@ -331,6 +351,7 @@ def handle_mouse_down(game, pos):
             _, buttons = layout.get_pause_menu_layout(game)
             for index, rect in enumerate(buttons):
                 if rect.collidepoint(pos):
+                    assets.play_stage_sound(game, "shoot", 0.45)
                     game.pause_select_index = index
                     activate_pause_menu_item(game, index)
                     return

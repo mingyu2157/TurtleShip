@@ -44,7 +44,7 @@ WEATHER_TYPES = {
         "blink_alpha_low": 55,
         "blink_alpha_high": 165,
         "effect_inflate": 0.28,
-        "damage_per_second": 12.0,
+        "damage_per_second": 20.0,
         "enemy_damage_per_second": 10.0,
         "boss_damage_per_second": 7.0,
         "wave_boost": 2.25,
@@ -228,7 +228,9 @@ def apply_typhoon(game, event, dt):
 
     # 태풍은 범위 안에 있는 동안 매 프레임 조금씩 체력을 깎습니다.
     if getattr(game, "player", None) and effect_rect.colliderect(game.player.get("hitbox", game.player["rect"])):
-        game.player["hp"] = max(0, game.player["hp"] - config["damage_per_second"] * dt)
+        incoming = config["damage_per_second"] * dt
+        incoming *= getattr(game, "augment_allied_damage_taken_multiplier", 1.0)
+        game.player["hp"] = max(0, game.player["hp"] - incoming)
 
     for enemy in getattr(game, "enemies", [])[:]:
         if not effect_rect.colliderect(enemy["rect"]):

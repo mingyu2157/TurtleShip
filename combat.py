@@ -18,6 +18,7 @@ import obstacles
 import projectiles
 import rewards
 import results
+import skills
 
 
 # 현재 무기 진화 단계에 맞춰 대포 기본 수치를 계산합니다.
@@ -33,10 +34,13 @@ def get_player_weapon_stats(game):
     tier_image_padding = (6, 7, 8, 9)[tier]
     # 기존 화포 강화 증강과 무기 진화 보너스를 합쳐 최종 피해량을 만듭니다.
     damage = 18 + getattr(game, "augment_bullet_damage", 0) + tier_damage_bonus
+    damage *= getattr(game, "augment_allied_attack_multiplier", 1.0)
     if getattr(game, "last_stand_damage_timer", 0) > 0:
-        damage *= getattr(game, "last_stand_damage_multiplier", 10.0)
+        damage *= getattr(game, "last_stand_damage_multiplier", 1.0)
+    elif getattr(game, "last_stand_revive_penalty_timer", 0) > 0:
+        damage *= (1.0 - skills.LAST_STAND_REVIVE_PENALTY)
     # 기존 대형 포환 증강과 무기 진화 보너스를 합쳐 최종 탄환 크기를 만듭니다.
-    radius = 6 + getattr(game, "augment_bullet_radius", 0) + tier_radius_bonus
+    radius = 3 + getattr(game, "augment_bullet_radius", 0) + tier_radius_bonus
     return tier, damage, radius, tier_image_padding
 
 
@@ -86,8 +90,9 @@ def shoot_player_bullet(game):
     results.record_shot(game)
 
     # 장전 훈련 증강이 있으면 다음 발사까지 기다리는 시간이 짧아집니다.
-    base_cooldown = 0.28
-    game.shoot_cooldown = max(0.08, base_cooldown * (1 - getattr(game, "augment_reload_bonus", 0)))
+    base_cooldown = 0.65
+    total_reload_bonus = getattr(game, "augment_reload_bonus", 0) + getattr(game, "augment_perma_reload_speed_bonus", 0)
+    game.shoot_cooldown = max(0.08, base_cooldown * (1 - min(0.8, total_reload_bonus)))
     assets.play_stage_sound(game, "shoot", 0.5)
 
 
@@ -253,6 +258,10 @@ def damage_player(game, amount):
     # 피해 적용 전 체력을 기억해 두면 실제로 얼마나 깎였는지 계산할 수 있습니다.
     before_hp = game.player["hp"]
     # max(0, ...)을 쓰면 체력이 음수로 내려가지 않습니다.
+    # 필생즉사 활성 중에는 받는 피해를 50%로 줄입니다.
+    if getattr(game, "last_stand_damage_active", False):
+        amount = amount * skills.LAST_STAND_DAMAGE_REDUCTION
+    amount = amount * getattr(game, "augment_allied_damage_taken_multiplier", 1.0)
     game.player["hp"] = max(0, game.player["hp"] - amount)
     # 실제 피해량은 이전 체력과 이후 체력의 차이입니다.
     actual_damage = before_hp - game.player["hp"]

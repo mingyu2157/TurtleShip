@@ -405,11 +405,11 @@ def draw_pause_button(game, rect, label, selected, hovered):
 def draw_augment_select(game, draw_sea_background):
     augment_background = game.images.get("argu_background")
     if augment_background:
-        layout.draw_cover(game, augment_background)
+        # contain 방식으로 그려서 이미지 가장자리가 쟘리지 않게 합니다.
+        game.screen.fill((8, 8, 12))
+        draw_image_contain_in_rect(game, augment_background, game.screen.get_rect())
     else:
         draw_sea_background(game)
-
-    if not augment_background:
         shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
         shade.fill((0, 0, 0, 168))
         game.screen.blit(shade, (0, 0))
@@ -427,36 +427,46 @@ def draw_augment_select(game, draw_sea_background):
 
 
 # 1단계 첫 전투 전 기본 능력 선택 화면을 그립니다.
-# 선택한 기본 능력 이미지가 화면 전체에 보이도록 별도 연출을 사용합니다.
+# argu_background 이미지를 배경으로 쓰고 증강 카드 스타일로 선택지를 보여줍니다.
 def draw_basic_ability_select(game, draw_sea_background):
-    choices = getattr(game, "basic_ability_choices", [])
-    selected_index = get_safe_choice_index(game, len(choices))
-
-    preview_choice = choices[selected_index] if choices else None
-    preview_image = None
-    if preview_choice:
-        image_key = preview_choice.get("image_key") or preview_choice.get("id", "")
-        preview_image = game.images.get(image_key) or game.images.get(preview_choice.get("id", ""))
-
-    game.screen.fill(BLACK)
-    if preview_image:
-        draw_image_contain_in_rect(game, preview_image, game.screen.get_rect())
+    augment_background = game.images.get("basic_background") or game.images.get("argu_background")
+    if augment_background:
+        game.screen.fill((8, 8, 12))
+        draw_image_contain_in_rect(game, augment_background, game.screen.get_rect())
     else:
         draw_sea_background(game)
+        shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 168))
+        game.screen.blit(shade, (0, 0))
+
+    choices = getattr(game, "basic_ability_choices", [])
+    rects = layout.get_augment_choice_rects(game, len(choices))
+    mouse_pos = pygame.mouse.get_pos()
+    selected_index = get_safe_choice_index(game, len(choices))
+    for index, rect in enumerate(rects):
+        choice = choices[index]
+        image_key = choice.get("image_key") or choice.get("id", "")
+        data = {
+            "title": choice.get("title", ""),
+            "description": choice.get("description", ""),
+            "max_stack": 1,
+        }
+        hovered = rect.collidepoint(mouse_pos)
+        draw_augment_card(game, rect, index, image_key, data, 0, hovered, index == selected_index)
 
 
 # 4단계 명량해전 직전 생즉사 사즉생 방향을 고르는 화면입니다.
-# 설정서의 "공격력 10배"와 "낮은 확률 부활"을 실제 선택지로 분리했습니다.
+# argu_background를 배경으로 하고, live.png(필사즉생)/die.png(필생즉사) 카드로 선택합니다.
 def draw_last_stand_select(game, draw_sea_background):
-    draw_sea_background(game)
-
-    shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
-    shade.fill((0, 0, 0, 178))
-    game.screen.blit(shade, (0, 0))
-
-    title_y = int(game.pad_height * 0.18)
-    draw_text(game, "생즉사 사즉생", 44 if game.pad_width >= 760 else 34, WHITE, game.pad_width // 2, title_y, True, True)
-    draw_text(game, "명량해전에서 한 번 발동할 방식을 고릅니다", 19, YELLOW, game.pad_width // 2, title_y + 48, True, True)
+    augment_background = game.images.get("argu_background")
+    if augment_background:
+        game.screen.fill((8, 8, 12))
+        draw_image_contain_in_rect(game, augment_background, game.screen.get_rect())
+    else:
+        draw_sea_background(game)
+        shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 178))
+        game.screen.blit(shade, (0, 0))
 
     choices = skills.LAST_STAND_CHOICES
     rects = layout.get_augment_choice_rects(game, len(choices))
@@ -464,16 +474,14 @@ def draw_last_stand_select(game, draw_sea_background):
     selected_index = get_safe_choice_index(game, len(choices))
     for index, rect in enumerate(rects):
         choice = choices[index]
+        image_key = choice.get("image_key", choice.get("id", ""))
         hovered = rect.collidepoint(mouse_pos)
         data = {
             "title": choice["title"],
             "description": choice["description"],
             "max_stack": 1,
         }
-        draw_augment_card(game, rect, index, choice.get("id", ""), data, 0, hovered, index == selected_index)
-
-    footer_y = min(game.pad_height - 54, rects[-1].bottom + 46) if rects else game.pad_height - 54
-    draw_text(game, "← → / ↑ ↓ 이동, Enter 선택, 1 / 2 바로 선택", 18, GRAY, game.pad_width // 2, footer_y, True, True)
+        draw_augment_card(game, rect, index, image_key, data, 0, hovered, index == selected_index)
 
 
 # 선택지 개수 안에서 현재 키보드 선택 위치를 안전하게 가져옵니다.
@@ -501,11 +509,6 @@ def draw_augment_card(game, rect, index, augment_id, data, current_stack, hovere
     if active:
         image_box.inflate_ip(56, 72)
     image_box.center = rect.center
-
-    shadow_rect = image_box.move(0, 12 if active else 8)
-    shadow = pygame.Surface(shadow_rect.size, pygame.SRCALPHA)
-    shadow.fill((0, 0, 0, 100 if active else 68))
-    game.screen.blit(shadow, shadow_rect)
 
     draw_image_contain_in_rect(game, image, image_box)
 
@@ -981,7 +984,16 @@ def draw_side_hud(game):
     draw_bar(game, hp_rect, game.player["hp"], game.player["maxHp"], GREEN if game.player["hp"] > 45 else RED)
     draw_text(game, f"{int(game.player['hp'])}/{game.player['maxHp']}", 14, WHITE, x, hp_rect.bottom + 8)
 
-    mode_y = hp_rect.bottom + 48
+    stat_y = hp_rect.bottom + 34
+    draw_text(game, "능력치", 15, GRAY, x, stat_y)
+    attack = augments.get_current_bullet_damage(game)
+    move_speed = augments.get_current_move_speed(game)
+    fire_cooldown = augments.get_current_fire_cooldown(game)
+    bullet_radius = augments.get_current_bullet_radius(game)
+    draw_text(game, f"공격력 {attack}  탄환크기 {bullet_radius // 3}", 14, WHITE, x, stat_y + 23, False, True)
+    draw_text(game, f"이동속도 {move_speed}  연사간격 {fire_cooldown:.2f}초", 14, WHITE, x, stat_y + 43, False, True)
+
+    mode_y = hp_rect.bottom + 94
     draw_text(game, "모드", 15, GRAY, x, mode_y)
     mode_name = "점수 경쟁" if augments.is_score_mode(game) else "이순신 시뮬레이션"
     level = getattr(game, "run_level", 1)
@@ -993,7 +1005,7 @@ def draw_side_hud(game):
     draw_text(game, f"경험치 {xp}/{xp_to_next}", 13, GRAY, x, xp_rect.bottom + 7, False, True)
     summary_rect = pygame.Rect(x, xp_rect.bottom + 30, max(80, right_panel.width - 32), 46)
     draw_wrapped_text(game, augments.get_augment_summary(game), 13, WHITE, summary_rect, 2, True)
-    skill_y = summary_rect.bottom + 34
+    skill_y = summary_rect.bottom + 26
 
     skill_width = max(80, right_panel.width - 32)
     draw_text(game, "전술", 16, WHITE, x, skill_y - 26, False, True)
@@ -1037,11 +1049,34 @@ def draw_side_hud(game):
         status_y += 22
 
     if game.stage_index >= skills.LAST_STAND_STAGE_INDEX:
-        last_status = "사용됨" if getattr(game, "last_stand_used", False) else "준비"
-        damage_timer = getattr(game, "last_stand_damage_timer", 0)
-        if damage_timer > 0:
-            last_status = f"화력 {damage_timer:.0f}초"
-        draw_text(game, f"생즉사 사즉생 {last_status}", 13, YELLOW, x, status_y, False, True)
+        choice = getattr(game, "last_stand_choice", "damage")
+        if choice == "damage":
+            dmg_timer = getattr(game, "last_stand_damage_timer", 0)
+            dmg_cd = getattr(game, "last_stand_damage_cooldown", 0)
+            if dmg_timer > 0:
+                last_status = f"공격력↑ {dmg_timer:.0f}초"
+                color = (255, 200, 50)
+            elif dmg_cd > 0:
+                last_status = f"쿨타임 {dmg_cd:.0f}초"
+                color = GRAY
+            else:
+                last_status = "준비"
+                color = YELLOW
+            draw_text(game, f"필생즉사 {last_status}", 13, color, x, status_y, False, True)
+        else:
+            rev_cd = getattr(game, "last_stand_revive_cooldown", 0)
+            pen_timer = getattr(game, "last_stand_revive_penalty_timer", 0)
+            if pen_timer > 0:
+                last_status = f"공격↓ {pen_timer:.0f}초 | 쿨 {rev_cd:.0f}초"
+                color = (180, 130, 255)
+            elif rev_cd > 0:
+                last_status = f"쿨타임 {rev_cd:.0f}초"
+                color = GRAY
+            else:
+                last_status = "준비"
+                color = YELLOW
+            draw_text(game, f"필사즉생 {last_status}", 13, color, x, status_y, False, True)
+        status_y += 22
 
     progress_y = skill_y + 170
     draw_text(game, "진행", 18, WHITE, x, progress_y, False, True)

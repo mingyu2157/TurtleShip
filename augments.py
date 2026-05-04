@@ -18,6 +18,9 @@ import random
 # 현재 판에서 1레벨에서 2레벨로 가기 위해 필요한 기본 경험치입니다.
 BASE_XP_TO_LEVEL = 45
 
+# 전체 레벨업 곡선을 더 완만하게 늦추기 위한 경험치 배율입니다.
+XP_REQUIREMENT_MULTIPLIER = 1.5
+
 # 레벨이 오를수록 경험치 요구량이 얼마나 가파르게 늘어날지 정합니다.
 XP_GROWTH = 1.32
 
@@ -48,7 +51,7 @@ BASIC_ABILITY_CHOICES = [
         "id": "basic_random_skill",
         "image_key": "basic_random",
         "title": "랜덤 스킬",
-        "description": "장전 훈련, 노군 훈련, 치유 전술 중 하나를 얻습니다.",
+        "description": "아군 화력/방어, 장전 강화, 지속 치유 중 하나를 영구 획득합니다.",
         "augment_id": None,
     },
     {
@@ -61,7 +64,24 @@ BASIC_ABILITY_CHOICES = [
 ]
 
 # 랜덤 스킬 기본 능력에서 나올 수 있는 후보입니다.
-BASIC_RANDOM_SKILLS = ("reload_training", "oar_training", "healer_skill")
+BASIC_RANDOM_SKILLS = ("ally_fleet_training", "rapid_reload_training", "continuous_repair")
+
+
+# 기본 능력 랜덤 3종은 동시에 여러 개가 적용되지 않도록 관리합니다.
+# 테스트 중 재선택하거나 상태를 덮어쓸 때도 마지막으로 고른 1개만 남기기 위해
+# 이 함수가 랜덤 전용 보정값과 augment_stacks 기록을 정리합니다.
+def clear_basic_random_skill_effects(game):
+    ensure_augment_state(game)
+    game.augment_allied_attack_multiplier = 1.0
+    game.augment_allied_damage_taken_multiplier = 1.0
+    game.augment_perma_reload_speed_bonus = 0.0
+    game.augment_passive_heal_per_second = 0.0
+
+    stacks = getattr(game, "augment_stacks", {})
+    for augment_id in BASIC_RANDOM_SKILLS:
+        if augment_id in stacks:
+            stacks.pop(augment_id, None)
+    game.augment_stacks = stacks
 
 
 # 증강 목록입니다.
@@ -163,6 +183,26 @@ AUGMENTS = {
         "score_any_stage": True,
         "requires": "hakikjin_skill",
     },
+    # 아래 3개는 "기본 능력 랜덤"으로만 얻는 영구 효과입니다.
+    # stages를 빈 튜플로 두어 일반 레벨업 선택지에는 나오지 않게 합니다.
+    "ally_fleet_training": {
+        "title": "아군 함대 전투 교리",
+        "description": "아군 함선 공격력 +15%, 받는 피해 -15%",
+        "max_stack": 1,
+        "stages": (),
+    },
+    "rapid_reload_training": {
+        "title": "속사 장전 교범",
+        "description": "장전 속도 +15%",
+        "max_stack": 1,
+        "stages": (),
+    },
+    "continuous_repair": {
+        "title": "상시 수리 인력",
+        "description": "아군 함선 지속 치유(치유 스킬의 1/3)",
+        "max_stack": 1,
+        "stages": (),
+    },
 }
 
 
@@ -184,6 +224,10 @@ def reset_run(game):
     game.choice_select_index = 0
     # 아래 값들은 증강이 실제 전투 계산에 쓰는 능력치 보정입니다.
     reset_augment_effects(game)
+    # 기본 능력은 영구 능력이므로 스테이지가 바뀌어도 다시 적용합니다.
+    basic_id = getattr(game, "basic_ability_augment_id", None)
+    if basic_id:
+        grant_augment(game, basic_id)
 
 
 # 첫 출전 전 기본 능력 선택지를 준비합니다.
@@ -205,16 +249,19 @@ def choose_basic_ability(game, choice_index):
 
     if augment_id is None:
         # 랜덤 스킬은 현재 판에서 아직 최대치가 아닌 후보만 뽑습니다.
-        candidates = [
-            candidate
-            for candidate in BASIC_RANDOM_SKILLS
-            if getattr(game, "augment_stacks", {}).get(candidate, 0) < AUGMENTS[candidate]["max_stack"]
-        ]
-        augment_id = random.choice(candidates or list(BASIC_RANDOM_SKILLS))
+        clear_basic_random_skill_effects(game)
+        augment_id = random.choice(list(BASIC_RANDOM_SKILLS))
+
+    # 기본 능력을 다시 고르게 되는 테스트/디버그 상황에서도
+    # 랜덤 3종은 반드시 마지막으로 적용된 1개만 남도록 이전 랜덤 효과를 먼저 지웁니다.
+    if augment_id in BASIC_RANDOM_SKILLS:
+        clear_basic_random_skill_effects(game)
 
     if not grant_augment(game, augment_id):
         return False
 
+    # 기본 능력은 영구 능력이므로 스테이지가 바뀌어도 다시 적용할 수 있게 저장합니다.
+    game.basic_ability_augment_id = augment_id
     game.basic_ability_chosen = True
     game.basic_ability_choices = []
     game.message_text = f"기본 능력: {AUGMENTS[augment_id]['title']}"
@@ -242,6 +289,11 @@ def reset_augment_effects(game):
     game.augment_guard_bonus = 0
     # 학익진 자동 사격 간격 보정입니다.
     game.augment_hakikjin_bonus = 0
+    # 랜덤 기본 능력 전용 영구 효과 보정값입니다.
+    game.augment_allied_attack_multiplier = 1.0
+    game.augment_allied_damage_taken_multiplier = 1.0
+    game.augment_perma_reload_speed_bonus = 0.0
+    game.augment_passive_heal_per_second = 0.0
     # 증강으로 해금되는 몸빵/치유/학익진 스킬입니다.
     game.tanker_skill_unlocked = False
     game.healer_skill_unlocked = False
@@ -260,6 +312,10 @@ def ensure_augment_state(game):
         "augment_heal_bonus": 0,
         "augment_guard_bonus": 0,
         "augment_hakikjin_bonus": 0,
+        "augment_allied_attack_multiplier": 1.0,
+        "augment_allied_damage_taken_multiplier": 1.0,
+        "augment_perma_reload_speed_bonus": 0.0,
+        "augment_passive_heal_per_second": 0.0,
         "tanker_skill_unlocked": False,
         "healer_skill_unlocked": False,
         "hakikjin_unlocked": False,
@@ -276,7 +332,45 @@ def ensure_augment_state(game):
 # 현재 레벨에서 다음 레벨까지 필요한 경험치를 계산합니다.
 def get_xp_to_next_level(level):
     # 레벨이 오를수록 BASE_XP_TO_LEVEL * XP_GROWTH^(level-1) 형태로 요구량이 증가합니다.
-    return int(BASE_XP_TO_LEVEL * (XP_GROWTH ** max(0, level - 1)))
+    base = BASE_XP_TO_LEVEL * (XP_GROWTH ** max(0, level - 1))
+    return int(base * XP_REQUIREMENT_MULTIPLIER)
+
+
+# 현재 증강/무기 단계 기준으로 기본 포탄 공격력을 계산합니다.
+def get_current_bullet_damage(game):
+    tier = max(0, min(3, getattr(game, "weapon_tier", 0)))
+    tier_damage_bonus = (0, 4, 8, 13)[tier]
+    damage = 18 + getattr(game, "augment_bullet_damage", 0) + tier_damage_bonus
+    damage *= getattr(game, "augment_allied_attack_multiplier", 1.0)
+    if getattr(game, "last_stand_damage_timer", 0) > 0:
+        damage *= getattr(game, "last_stand_damage_multiplier", 1.0)
+    elif getattr(game, "last_stand_revive_penalty_timer", 0) > 0:
+        import skills
+        damage *= (1.0 - skills.LAST_STAND_REVIVE_PENALTY)
+    return max(1, int(round(damage)))
+
+
+# 현재 증강/무기 단계 기준으로 포탄 충돌 반지름을 계산합니다.
+def get_current_bullet_radius(game):
+    tier = max(0, min(3, getattr(game, "weapon_tier", 0)))
+    tier_radius_bonus = (0, 0, 2, 4)[tier]
+    return max(3, int(3 + getattr(game, "augment_bullet_radius", 0) + tier_radius_bonus))
+
+
+# 현재 증강 상태 기준으로 1회 발사 후 다음 발사까지 기본 대기시간을 돌려줍니다.
+def get_current_fire_cooldown(game):
+    total_reload_bonus = getattr(game, "augment_reload_bonus", 0) + getattr(game, "augment_perma_reload_speed_bonus", 0)
+    return max(0.08, 0.65 * (1 - min(0.8, total_reload_bonus)))
+
+
+# 현재 플레이어 이동속도를 숫자로 보여주기 위한 값입니다.
+def get_current_move_speed(game):
+    player = getattr(game, "player", None)
+    if player:
+        return int(round(player.get("speed", 0)))
+    stage = game.current_stage() if hasattr(game, "current_stage") else {}
+    base_speed = int(360 * stage.get("player_speed_multiplier", 1.0))
+    return int(base_speed + getattr(game, "augment_speed_bonus", 0))
 
 
 # 현재 게임이 점수 경쟁 모드인지 확인합니다.
@@ -401,7 +495,7 @@ def apply_augment_effect(game, augment_id):
         if player:
             player["speed"] += 8
     elif augment_id == "cannon_size":
-        game.augment_bullet_radius += 1
+        game.augment_bullet_radius += 3
     elif augment_id == "reload_training":
         game.augment_reload_bonus = min(0.55, game.augment_reload_bonus + 0.08)
     elif augment_id == "weapon_hyeonja":
@@ -431,6 +525,15 @@ def apply_augment_effect(game, augment_id):
         game.augment_guard_bonus += 0.7
     elif augment_id == "hakikjin_mastery":
         game.augment_hakikjin_bonus += 1
+    elif augment_id == "ally_fleet_training":
+        game.augment_allied_attack_multiplier *= 1.15
+        game.augment_allied_damage_taken_multiplier *= 0.85
+    elif augment_id == "rapid_reload_training":
+        game.augment_perma_reload_speed_bonus += 0.15
+    elif augment_id == "continuous_repair":
+        import skills
+
+        game.augment_passive_heal_per_second += skills.HEALER_HEAL_PER_SECOND / 3.0
 
 
 # HUD에 짧게 보여줄 증강 요약 문장을 만듭니다.

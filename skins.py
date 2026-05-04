@@ -29,10 +29,14 @@ GAME_BACKGROUND_PLAY_RECT = (30, 34, 1476, 956)
 # 파일 이름은 augments.py의 증강 id와 같게 두면 자동으로 불러옵니다.
 AUGMENT_CARD_IMAGE_NAMES = [
     "argu_background",
+    "basic_background",
     "basic_weapon",
     "basic_random",
     "basic_random_skill",
     "basic_hull",
+    # 명량해전 생즉사 사즉생 선택 화면에서 쓰는 카드 이미지입니다.
+    "live",
+    "die",
     "cannon_damage",
     "cannon_size",
     "reload_training",

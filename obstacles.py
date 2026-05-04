@@ -167,6 +167,24 @@ def collides_rect(game, rect):
     return False
 
 
+# 원형 탄환이 한 프레임 동안 이동한 경로가 바위 중심부를 스쳤는지 검사합니다.
+# 고속 탄환이 프레임 사이에서 얇은 벽을 건너뛰는 문제(터널링)를 줄이기 위해
+# 시작점/끝점 포함 + 선분 교차를 함께 사용합니다.
+def projectile_hits_obstacle_path(obstacle, projectile):
+    block_rect = get_block_rect(obstacle)
+    radius = max(1, int(projectile.get("radius", 1)))
+    expanded = block_rect.inflate(radius * 2, radius * 2)
+
+    x0 = float(projectile.get("prev_x", projectile.get("x", 0.0)))
+    y0 = float(projectile.get("prev_y", projectile.get("y", 0.0)))
+    x1 = float(projectile.get("x", 0.0))
+    y1 = float(projectile.get("y", 0.0))
+
+    if expanded.collidepoint(x0, y0) or expanded.collidepoint(x1, y1):
+        return True
+    return bool(expanded.clipline((x0, y0), (x1, y1)))
+
+
 # 플레이어가 지형지물을 통과하려고 하면 이전 위치로 되돌립니다.
 def resolve_player_collision(game, previous_rect):
     if not game.player:
@@ -199,14 +217,12 @@ def resolve_enemy_collision(game, enemy, previous_rect):
 def block_projectiles(game):
     for bullet in game.bullets[:]:
         # 플레이어/전술 탄환이 바위에 닿으면 사라집니다.
-        rect = projectiles.get_circle_rect(bullet["x"], bullet["y"], bullet["radius"])
-        if collides_rect(game, rect):
+        if any(projectile_hits_obstacle_path(obstacle, bullet) for obstacle in getattr(game, "obstacles", [])):
             game.bullets.remove(bullet)
 
     for projectile in game.enemy_projectiles[:]:
         # 적 탄환도 같은 방식으로 지형지물을 관통하지 못합니다.
-        rect = projectiles.get_circle_rect(projectile["x"], projectile["y"], projectile["radius"])
-        if collides_rect(game, rect):
+        if any(projectile_hits_obstacle_path(obstacle, projectile) for obstacle in getattr(game, "obstacles", [])):
             game.enemy_projectiles.remove(projectile)
 
 

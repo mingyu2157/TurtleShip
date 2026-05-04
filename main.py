@@ -130,6 +130,7 @@ class Game:
         self.augment_pending = False
         self.basic_ability_choices = []
         self.basic_ability_chosen = False
+        self.basic_ability_augment_id = None
         # 선택지 화면에서 방향키로 움직이는 현재 카드 번호입니다.
         # 증강, 기본 능력, 생즉사 사즉생 화면이 같은 값을 함께 씁니다.
         self.choice_select_index = 0
@@ -154,8 +155,14 @@ class Game:
         self.last_stand_used = False
         self.last_stand_choice = "damage"
         self.last_stand_choice_made = False
+        self.last_stand_choice_version = 2
         self.last_stand_damage_timer = 0.0
         self.last_stand_damage_multiplier = 1.0
+        self.last_stand_damage_active = False
+        self.last_stand_damage_cooldown = 0.0
+        self.last_stand_revive_cooldown = 0.0
+        self.last_stand_revive_penalty_timer = 0.0
+        self.revive_flash_timer = 0.0
         # 현재 재생 중인 배경음악 종류입니다.
         # assets.py가 같은 음악을 반복해서 처음부터 틀지 않도록 기억하는 값입니다.
         self.current_music_key = None
@@ -250,17 +257,20 @@ def updateGame(dt):
         actors.handle_boss_defeated(game)
         return
 
-    # 플레이어 체력이 10% 이하로 떨어지면 4단계 이후 생존 이벤트를 먼저 확인합니다.
+    # 필생즉사(damage) 선택 시: 체력 20% 이하에서 발동합니다.
     if (
-        game.player["hp"] > 0
-        and game.player["hp"] <= game.player["maxHp"] * skills.LAST_STAND_HEAL_RATIO
+        getattr(game, "last_stand_choice", "damage") == "damage"
+        and game.player["hp"] > 0
+        and game.player["hp"] <= game.player["maxHp"] * skills.LAST_STAND_TRIGGER_RATIO
         and skills.try_use_last_stand(game)
     ):
         return
 
-    # 플레이어 체력이 0이 되었을 때도 마지막으로 생존 이벤트를 한 번 더 확인합니다.
+    # 플레이어 체력이 0이 되었을 때 사망 처리합니다.
     if game.player["hp"] <= 0:
-        if skills.try_use_last_stand(game):
+        # 필사즉생(revive) 선택 시: 사망 시 부활을 시도합니다.
+        if getattr(game, "last_stand_choice", "damage") == "revive" and skills.try_use_last_stand(game):
+            game.revive_flash_timer = 0.7
             return
         actors.end_game(game, False)
 

@@ -98,6 +98,15 @@ def draw_game(game):
     if game.message_timer > 0:
         ui.draw_text(game, game.message_text, 30, YELLOW, game.pad_width // 2, int(game.pad_height * 0.72), True, True)
 
+    # 부활 플래시: 화면 전체를 밝은 금빛으로 잠깐 물들입니다.
+    revive_flash = getattr(game, "revive_flash_timer", 0)
+    if revive_flash > 0:
+        alpha = int(min(220, 220 * (revive_flash / 0.7)))
+        flash_surf = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
+        flash_surf.fill((255, 230, 80, alpha))
+        game.screen.blit(flash_surf, (0, 0))
+        ui.draw_text(game, "부활!", 48, (255, 255, 255), game.pad_width // 2, game.pad_height // 2, True, True)
+
     if game.paused:
         ui.draw_pause_menu(game)
 
