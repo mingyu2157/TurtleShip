@@ -355,6 +355,39 @@ def start_score_mode(game):
     assets.play_music(game)
 
 
+# 일시정지 메뉴의 재시작 버튼에서 현재 모드를 처음부터 다시 시작합니다.
+# 캠페인은 현재 선택된 해전을 전투 화면부터 다시 열고, 점수 경쟁은 새 점수 경쟁 한 판으로 시작합니다.
+def restart_current_play(game):
+    if getattr(game, "game_mode", "campaign") == "score":
+        start_score_mode(game)
+        return
+
+    stage_index = getattr(game, "stage_index", 0)
+    if not 0 <= stage_index < STAGE_MAX:
+        open_stage_select(game)
+        return
+
+    campaign.apply_progress_to_game(game)
+    if not campaign.is_stage_unlocked(game, stage_index):
+        open_stage_select(game)
+        return
+
+    game.stage_index = stage_index
+    game.game_mode = "campaign"
+    game.paused = False
+    reset_stage_run(game)
+
+    if should_open_basic_ability_select(game):
+        open_basic_ability_select(game)
+        return
+
+    if should_open_last_stand_select(game):
+        open_last_stand_select(game)
+        return
+
+    begin_stage(game)
+
+
 # 보스를 처치했을 때 현재 스테이지를 클리어 처리합니다.
 # 다음 스테이지는 자동으로 시작하지 않고, 잠금 해제 후 스테이지 선택 화면으로 돌아갑니다.
 def complete_stage(game):

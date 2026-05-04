@@ -116,6 +116,7 @@ class Game:
         self.cleared_stage_count = 0
         self.stage_select_index = 0
         self.menu_select_index = 0
+        self.pause_select_index = 0
         self.hakikjin_unlocked = False
         self.shoot_cooldown = 0
         self.obstacle_spawn_timer = 0
