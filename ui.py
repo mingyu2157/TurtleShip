@@ -1010,7 +1010,7 @@ def draw_side_hud(game):
     draw_skill_bar(
         game,
         pygame.Rect(x, skill_y + 84, skill_width, 13),
-        "Q 보스전",
+        "Q/ㅂ 학익진",
         getattr(game, "hakikjin_timer", 0),
         skills.HAKIKJIN_DURATION,
         getattr(game, "hakikjin_cooldown", 0),
