@@ -81,6 +81,16 @@ def activate_pause_menu_item(game, index):
         assets.stop_music(game)
 
 
+# 개발자 테스트용으로 현재 전투를 바로 보스전으로 넘깁니다.
+def start_boss_battle_for_test(game):
+    if getattr(game, "boss", None) is not None:
+        game.message_text = "이미 보스전입니다"
+        game.message_timer = 1.2
+        return
+
+    actors.spawn_boss(game)
+
+
 # 키를 눌렀을 때 실행됩니다.
 # 메뉴/결과 화면/플레이 화면마다 같은 키도 다른 의미로 쓰일 수 있어서 상태별로 나눠 처리합니다.
 def handle_key_down(game, event):
@@ -256,7 +266,7 @@ def handle_key_down(game, event):
         return
 
     if skills.is_hakikjin_key(event):
-        skills.try_use_hakikjin(game)
+        start_boss_battle_for_test(game)
         return
 
     if skills.is_tanker_key(event):
