@@ -228,6 +228,8 @@ def updateGame(dt):
     game.stage_banner_timer = max(0, game.stage_banner_timer - dt)
     game.message_timer = max(0, game.message_timer - dt)
     game.shoot_cooldown = max(0, game.shoot_cooldown - dt)
+    if pygame.key.get_pressed()[pygame.K_SPACE]:
+        combat.shoot_player_bullet(game)
 
     # 아래 순서가 중요합니다.
     # 먼저 위치/타이머를 갱신하고, 마지막에 충돌을 검사해야 이번 프레임 결과가 자연스럽습니다.

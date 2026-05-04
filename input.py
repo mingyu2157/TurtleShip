@@ -256,7 +256,9 @@ def handle_key_down(game, event):
         return
 
     if event.key == pygame.K_SPACE:
-        combat.shoot_player_bullet(game)
+        # 스페이스 발사는 main.updateGame()에서 눌림 상태를 보고 처리합니다.
+        # 이렇게 해야 한 번 누르기와 꾹 누르기 모두 같은 쿨다운 간격을 사용합니다.
+        return
 
 
 # 키를 뗐을 때 실행됩니다.
