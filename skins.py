@@ -77,9 +77,9 @@ COMMON_IMAGE_NAMES = [
     # 배경.png:
     #   스테이지 선택 화면 전용 배경 이미지입니다. stage_select_background 대신 우선 사용됩니다.
     "배경",
-    # 잘금_2.png ~ 잘금_5.png:
+    # 잠금_2.png ~ 잠금_5.png:
     #   해당 스테이지가 잠겼을 때 카드 자리에 표시되는 이미지입니다.
-    *[f"잘금_{n}" for n in range(2, 6)],
+    *[f"잠금_{n}" for n in range(2, 6)],
     # 글귀_1.png ~ 글귀_5.png:
     #   스테이지를 가리킬 때 화면 하단에 표시되는 해전 명언/글귀 이미지입니다.
     *[f"글귀_{n}" for n in range(1, 6)],

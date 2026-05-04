@@ -572,18 +572,22 @@ def draw_stage_select(game, draw_sea_background):
         focused = index == focused_index
 
         if not unlocked:
-            card_img = game.images.get(f"잘금_{index + 1}")
+            card_img = game.images.get(f"잠금_{index + 1}")
+        elif not cleared:
+            # 해금됐지만 아직 클리어하지 않은 스테이지: 출전 준비 이미지
+            card_img = (
+                game.images.get(f"출전 준비_{index + 1}")
+                or game.images.get(f"출전 준비{index + 1}")
+            )
         elif focused:
-            # 1번 파일명은 언더스코어 없이 저장되어 있어 두 키를 모두 시도합니다.
+            # 클리어했고 포커스된 스테이지: 출전 준비 이미지
             card_img = (
                 game.images.get(f"출전 준비_{index + 1}")
                 or game.images.get(f"출전 준비{index + 1}")
                 or game.images.get(f"완료_{index + 1}")
             )
-        elif cleared:
-            card_img = game.images.get(f"완료_{index + 1}")
         else:
-            card_img = game.images.get(f"출전 준비_{index + 1}")
+            card_img = game.images.get(f"완료_{index + 1}")
 
         if card_img:
             draw_image_cover_in_rect(game, card_img, rect)
