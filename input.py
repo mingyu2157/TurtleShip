@@ -261,7 +261,7 @@ def handle_mouse_down(game, pos):
         return
 
     if game.game_state == "ability_select":
-        for index, rect in enumerate(layout.get_augment_choice_rects(game, len(getattr(game, "basic_ability_choices", [])))):
+        for index, rect in enumerate(layout.get_basic_ability_choice_rects(game, len(getattr(game, "basic_ability_choices", [])))):
             if rect.collidepoint(pos):
                 game.choice_select_index = index
                 actors.choose_basic_ability(game, index)

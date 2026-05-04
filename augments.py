@@ -39,18 +39,21 @@ WEAPON_TIER_NAMES = {
 BASIC_ABILITY_CHOICES = [
     {
         "id": "basic_weapon",
+        "image_key": "basic_weapon",
         "title": "무기 진화",
         "description": "황자총통에서 현자총통으로 시작합니다. 일자 포격 피해가 늘어납니다.",
         "augment_id": "weapon_hyeonja",
     },
     {
         "id": "basic_random_skill",
+        "image_key": "basic_random",
         "title": "랜덤 스킬",
         "description": "장전 훈련, 노군 훈련, 치유 전술 중 하나를 얻습니다.",
         "augment_id": None,
     },
     {
         "id": "basic_hull",
+        "image_key": "basic_hull",
         "title": "기본 체력 증가",
         "description": "선체 보강을 얻고 최대 체력이 증가합니다.",
         "augment_id": "hull_reinforce",

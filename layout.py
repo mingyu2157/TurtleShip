@@ -159,18 +159,18 @@ def get_menu_button_rects(game):
 # 증강 선택 화면에서 3개 카드 위치를 계산합니다.
 def get_augment_choice_rects(game, choice_count):
     count = max(1, choice_count)
-    gap = 18
+    gap = 42 if game.pad_width >= 980 else 24
     if game.pad_width >= 980:
         columns = count
     else:
         columns = 1
 
-    content_width = min(920, int(game.pad_width * 0.84))
+    content_width = min(1120, int(game.pad_width * 0.90))
     card_width = (content_width - gap * (columns - 1)) // columns
-    card_height = 180 if columns > 1 else 132
+    card_height = 230 if columns > 1 else 176
     total_width = card_width * columns + gap * (columns - 1)
     start_x = (game.pad_width - total_width) // 2
-    start_y = int(game.pad_height * 0.42)
+    start_y = int(game.pad_height * 0.50)
 
     rects = []
     for index in range(choice_count):
@@ -184,6 +184,21 @@ def get_augment_choice_rects(game, choice_count):
                 card_height,
             )
         )
+    return rects
+
+
+# 기본 능력 선택 화면의 하단 선택 영역 위치를 계산합니다.
+# 실제 화면에는 이미지만 보이므로, 마우스 선택을 위한 보이지 않는 전체 화면 분할 영역을 만듭니다.
+def get_basic_ability_choice_rects(game, choice_count):
+    rects = []
+    if choice_count <= 0:
+        return rects
+
+    band_width = game.pad_width / choice_count
+    for index in range(choice_count):
+        left = int(round(index * band_width))
+        right = int(round((index + 1) * band_width))
+        rects.append(pygame.Rect(left, 0, max(1, right - left), game.pad_height))
     return rects
 
 
