@@ -25,6 +25,30 @@ PLAYER_HITBOX_HEIGHT = 42
 # (왼쪽 x, 위 y, 너비, 높이) 순서이며, 테두리 장식 부분을 제외하는 데 사용됩니다.
 GAME_BACKGROUND_PLAY_RECT = (30, 34, 1476, 956)
 
+# 증강 선택 화면에서 쓸 배경과 각 증강 카드 이미지 이름입니다.
+# 파일 이름은 augments.py의 증강 id와 같게 두면 자동으로 불러옵니다.
+AUGMENT_CARD_IMAGE_NAMES = [
+    "argu_background",
+    "basic_weapon",
+    "basic_random",
+    "basic_random_skill",
+    "basic_hull",
+    "cannon_damage",
+    "cannon_size",
+    "reload_training",
+    "weapon_hyeonja",
+    "weapon_jija",
+    "weapon_cheonha",
+    "hull_reinforce",
+    "oar_training",
+    "tanker_skill",
+    "healer_skill",
+    "hakikjin_skill",
+    "repair_efficiency",
+    "guard_duration",
+    "hakikjin_mastery",
+]
+
 # 모든 스테이지에서 공통으로 사용할 이미지 이름입니다.
 COMMON_IMAGE_NAMES = [
     "main_menu",
@@ -83,6 +107,7 @@ COMMON_IMAGE_NAMES = [
     "weather_rain1",
     "weather_lightning1",
     "mini_boss",
+    *AUGMENT_CARD_IMAGE_NAMES,
 ]
 
 # 한 스테이지 안에 난중일기/스토리 페이지를 몇 편까지 미리 열어둘지 정합니다.

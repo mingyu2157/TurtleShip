@@ -403,16 +403,16 @@ def draw_pause_button(game, rect, label, selected, hovered):
 # 현재 전투에서 레벨업했을 때 3개 증강 선택지를 보여줍니다.
 # 증강은 저장되지 않고 현재 캠페인 스테이지/점수 경쟁 한 판 안에서만 유지됩니다.
 def draw_augment_select(game, draw_sea_background):
-    draw_sea_background(game)
+    augment_background = game.images.get("argu_background")
+    if augment_background:
+        layout.draw_cover(game, augment_background)
+    else:
+        draw_sea_background(game)
 
-    shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
-    shade.fill((0, 0, 0, 168))
-    game.screen.blit(shade, (0, 0))
-
-    title_y = int(game.pad_height * 0.18)
-    draw_text(game, "증강 선택", 46 if game.pad_width >= 760 else 34, WHITE, game.pad_width // 2, title_y, True, True)
-    mode_name = "점수 경쟁" if augments.is_score_mode(game) else "이순신 시뮬레이션"
-    draw_text(game, f"{mode_name} Lv.{getattr(game, 'run_level', 1)}  현재 판에서만 적용", 19, YELLOW, game.pad_width // 2, title_y + 48, True, True)
+    if not augment_background:
+        shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 168))
+        game.screen.blit(shade, (0, 0))
 
     choices = getattr(game, "augment_choices", [])
     rects = layout.get_augment_choice_rects(game, len(choices))
@@ -423,41 +423,26 @@ def draw_augment_select(game, draw_sea_background):
         data = augments.AUGMENTS[augment_id]
         current_stack = getattr(game, "augment_stacks", {}).get(augment_id, 0)
         hovered = rect.collidepoint(mouse_pos)
-        draw_augment_card(game, rect, index, data, current_stack, hovered, index == selected_index)
-
-    footer_y = min(game.pad_height - 54, rects[-1].bottom + 46) if rects else game.pad_height - 54
-    draw_text(game, "← → / ↑ ↓ 이동, Enter 선택, 1 / 2 / 3 바로 선택", 18, GRAY, game.pad_width // 2, footer_y, True, True)
+        draw_augment_card(game, rect, index, augment_id, data, current_stack, hovered, index == selected_index)
 
 
 # 1단계 첫 전투 전 기본 능력 선택 화면을 그립니다.
-# 일반 증강 선택 UI와 같은 카드 구조를 써서 나중에 디자인 이미지만 바꾸기 쉽게 합니다.
+# 선택한 기본 능력 이미지가 화면 전체에 보이도록 별도 연출을 사용합니다.
 def draw_basic_ability_select(game, draw_sea_background):
-    draw_sea_background(game)
-
-    shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
-    shade.fill((0, 0, 0, 174))
-    game.screen.blit(shade, (0, 0))
-
-    title_y = int(game.pad_height * 0.17)
-    draw_text(game, "기본 능력 선택", 44 if game.pad_width >= 760 else 34, WHITE, game.pad_width // 2, title_y, True, True)
-    draw_text(game, "사천포 출전 전에 하나를 고릅니다", 19, YELLOW, game.pad_width // 2, title_y + 48, True, True)
-
     choices = getattr(game, "basic_ability_choices", [])
-    rects = layout.get_augment_choice_rects(game, len(choices))
-    mouse_pos = pygame.mouse.get_pos()
     selected_index = get_safe_choice_index(game, len(choices))
-    for index, rect in enumerate(rects):
-        choice = choices[index]
-        hovered = rect.collidepoint(mouse_pos)
-        data = {
-            "title": choice["title"],
-            "description": choice["description"],
-            "max_stack": 1,
-        }
-        draw_augment_card(game, rect, index, data, 0, hovered, index == selected_index)
 
-    footer_y = min(game.pad_height - 54, rects[-1].bottom + 46) if rects else game.pad_height - 54
-    draw_text(game, "← → / ↑ ↓ 이동, Enter 선택, 1 / 2 / 3 바로 선택", 18, GRAY, game.pad_width // 2, footer_y, True, True)
+    preview_choice = choices[selected_index] if choices else None
+    preview_image = None
+    if preview_choice:
+        image_key = preview_choice.get("image_key") or preview_choice.get("id", "")
+        preview_image = game.images.get(image_key) or game.images.get(preview_choice.get("id", ""))
+
+    game.screen.fill(BLACK)
+    if preview_image:
+        draw_image_contain_in_rect(game, preview_image, game.screen.get_rect())
+    else:
+        draw_sea_background(game)
 
 
 # 4단계 명량해전 직전 생즉사 사즉생 방향을 고르는 화면입니다.
@@ -485,7 +470,7 @@ def draw_last_stand_select(game, draw_sea_background):
             "description": choice["description"],
             "max_stack": 1,
         }
-        draw_augment_card(game, rect, index, data, 0, hovered, index == selected_index)
+        draw_augment_card(game, rect, index, choice.get("id", ""), data, 0, hovered, index == selected_index)
 
     footer_y = min(game.pad_height - 54, rects[-1].bottom + 46) if rects else game.pad_height - 54
     draw_text(game, "← → / ↑ ↓ 이동, Enter 선택, 1 / 2 바로 선택", 18, GRAY, game.pad_width // 2, footer_y, True, True)
@@ -504,27 +489,25 @@ def get_safe_choice_index(game, choice_count):
 
 # 증강 카드 하나를 그립니다.
 # title/description은 augments.py의 AUGMENTS 딕셔너리에서 가져옵니다.
-def draw_augment_card(game, rect, index, data, current_stack, hovered, selected=False):
+def draw_augment_card(game, rect, index, augment_id, data, current_stack, hovered, selected=False):
     # 마우스 hover와 키보드 selected를 같은 강조 계열로 보여주어 현재 선택 위치를 한눈에 알 수 있게 합니다.
     active = hovered or selected
-    fill = (24, 35, 48, 238) if not active else (37, 53, 70, 248)
-    border = (255, 213, 92) if active else (172, 141, 81)
-    card = pygame.Surface(rect.size, pygame.SRCALPHA)
-    card.fill(fill)
-    game.screen.blit(card, rect)
-    pygame.draw.rect(game.screen, border, rect, 4 if selected else 3 if hovered else 1, border_radius=8)
+    image = game.images.get(augment_id)
 
-    x = rect.left + 18
-    y = rect.top + 18
-    draw_text(game, f"{index + 1}", 21, YELLOW, x, y, False, True)
-    # 긴 증강 이름은 한 줄로 찍으면 카드 밖으로 튀어나가므로 최대 두 줄로 줄바꿈합니다.
-    title_rect = pygame.Rect(x + 34, y - 4, rect.width - 58, 54)
-    draw_wrapped_text_limited(game, data["title"], 22, WHITE, title_rect, 2, True, 2)
-    # 설명도 카드 높이를 넘지 않게 줄 수를 제한합니다.
-    desc_top = y + 58
-    desc_height = max(46, rect.bottom - desc_top - 52)
-    draw_wrapped_text_limited(game, data["description"], 16, GRAY, pygame.Rect(x, desc_top, rect.width - 36, desc_height), 3, True, 3)
-    draw_text(game, f"현재 {current_stack}/{data['max_stack']}", 15, YELLOW, x, rect.bottom - 34, False, True)
+    if image is None:
+        return
+
+    image_box = rect.inflate(164, 194)
+    if active:
+        image_box.inflate_ip(56, 72)
+    image_box.center = rect.center
+
+    shadow_rect = image_box.move(0, 12 if active else 8)
+    shadow = pygame.Surface(shadow_rect.size, pygame.SRCALPHA)
+    shadow.fill((0, 0, 0, 100 if active else 68))
+    game.screen.blit(shadow, shadow_rect)
+
+    draw_image_contain_in_rect(game, image, image_box)
 
 
 # 캠페인 스테이지 선택 화면을 그립니다.
