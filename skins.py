@@ -69,6 +69,11 @@ COMMON_IMAGE_NAMES = [
     #   스테이지 선택 화면 중앙 패널 장식 이미지가 필요할 때 사용할 수 있는 예비 칸입니다.
     #   지금은 없어도 동작하고, 나중에 UI 디자인 이미지를 주면 assets.py가 자동으로 읽습니다.
     "stage_select_panel",
+    # story_mode.png / com_mode.png / mode_back.png:
+    #   모드 선택 화면에서 포커스 상태별로 표시할 전체 배경 이미지입니다.
+    "story_mode",
+    "com_mode",
+    "mode_back",
     # 배경.png:
     #   스테이지 선택 화면 전용 배경 이미지입니다. stage_select_background 대신 우선 사용됩니다.
     "배경",

@@ -92,7 +92,10 @@ def activate_pause_menu_item(game, index):
         return
 
     if index == 2:
-        actors.open_stage_select(game)
+        if getattr(game, "game_mode", "campaign") == "score":
+            actors.open_mode_select(game, 0)
+        else:
+            actors.open_stage_select(game)
         assets.stop_music(game)
 
 
@@ -105,26 +108,60 @@ def handle_key_down(game, event):
 
     if game.game_state == "menu":
         if event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_w, pygame.K_s):
-            game.menu_select_index = 1 - getattr(game, "menu_select_index", 0)
             return
         if event.key == pygame.K_1:
             assets.play_stage_sound(game, "shoot", 0.45)
-            actors.open_stage_select(game)
-            return
-        if event.key == pygame.K_2:
-            assets.play_stage_sound(game, "shoot", 0.45)
-            actors.start_score_mode(game)
+            actors.open_mode_select(game, 0)
             return
         if event.key == pygame.K_RETURN:
             assets.play_stage_sound(game, "shoot", 0.45)
-            if getattr(game, "menu_select_index", 0) == 0:
-                actors.open_stage_select(game)
-            else:
-                actors.start_score_mode(game)
+            actors.open_mode_select(game, 0)
             return
         if event.key == pygame.K_ESCAPE:
             pygame.quit()
             sys.exit()
+        return
+
+    if game.game_state == "mode_select":
+        current = getattr(game, "mode_select_index", 0)
+
+        if event.key in (pygame.K_LEFT, pygame.K_a):
+            if current == 2:
+                game.mode_select_index = 0
+            else:
+                game.mode_select_index = 1 if current == 0 else 0
+            return
+
+        if event.key in (pygame.K_RIGHT, pygame.K_d):
+            if current == 2:
+                game.mode_select_index = 1
+            else:
+                game.mode_select_index = 1 if current == 0 else 0
+            return
+
+        if event.key in (pygame.K_DOWN, pygame.K_s):
+            game.mode_select_index = 2
+            return
+
+        if event.key in (pygame.K_UP, pygame.K_w):
+            game.mode_select_index = 1 if current == 2 else 0
+            return
+
+        if event.key == pygame.K_RETURN:
+            assets.play_stage_sound(game, "shoot", 0.45)
+            selected = getattr(game, "mode_select_index", 0)
+            if selected == 0:
+                actors.open_stage_select(game)
+            elif selected == 1:
+                actors.start_score_mode(game)
+            else:
+                game.game_state = "menu"
+            return
+
+        if event.key == pygame.K_ESCAPE:
+            game.game_state = "menu"
+            return
+
         return
 
     if game.game_state == "augment_select":
@@ -190,7 +227,7 @@ def handle_key_down(game, event):
         # 스테이지 선택 화면에서는 숫자키, 방향키, Enter를 사용합니다.
         # 잠긴 스테이지를 고르면 actors.py가 안내 메시지를 띄우고 시작하지 않습니다.
         if event.key == pygame.K_ESCAPE:
-            game.game_state = "menu"
+            actors.open_mode_select(game, 0)
             return
 
         if pygame.K_1 <= event.key <= pygame.K_5:
@@ -316,13 +353,10 @@ def handle_key_up(game, event):
 # 메뉴에서는 시작 버튼 클릭, 플레이 중에는 발사로 사용합니다.
 def handle_mouse_down(game, pos):
     if game.game_state == "menu":
-        campaign_rect, score_rect = layout.get_menu_button_rects(game)
+        campaign_rect, _ = layout.get_menu_button_rects(game)
         if campaign_rect.collidepoint(pos):
             assets.play_stage_sound(game, "shoot", 0.45)
-            actors.open_stage_select(game)
-        elif score_rect.collidepoint(pos):
-            assets.play_stage_sound(game, "shoot", 0.45)
-            actors.start_score_mode(game)
+            actors.open_mode_select(game, 0)
         return
 
     if game.game_state == "augment_select":

@@ -39,6 +39,19 @@ from stages import (
 )
 
 
+# 메인 메뉴에서 모드 선택 화면으로 이동합니다.
+# 기본 포커스는 story_mode 이미지(인덱스 0)입니다.
+def open_mode_select(game, selected_index=0):
+    game.game_mode = "campaign"
+    campaign.apply_progress_to_game(game)
+    clear_battlefield(game)
+    game.game_state = "mode_select"
+    game.mode_select_index = 0 if selected_index <= 0 else 1 if selected_index == 1 else 2
+    game.paused = False
+    game.message_timer = 0
+    game.message_text = ""
+
+
 # 메인 메뉴나 결과 화면에서 캠페인 스테이지 선택 화면으로 이동합니다.
 # 저장된 진행도를 다시 읽어와서, 게임을 껐다 켜도 잠금 해제가 유지됩니다.
 def open_stage_select(game):

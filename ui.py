@@ -296,7 +296,7 @@ def show_splash(game):
 
 
 # 메인 메뉴 화면을 그립니다.
-# main_menu.png 위에 실제 클릭 가능한 캠페인/점수 경쟁 버튼을 덧그립니다.
+# main_menu.png 위에 실제 클릭 가능한 게임 시작 버튼 하나를 덧그립니다.
 def draw_menu(game, draw_sea_background):
     menu_image = game.images.get("main_menu")
     if menu_image:
@@ -306,11 +306,34 @@ def draw_menu(game, draw_sea_background):
         draw_text(game, "PyShooting", 52, WHITE, game.pad_width // 2, int(game.pad_height * 0.28), True, True)
         draw_text(game, "거북선 전쟁", 26, YELLOW, game.pad_width // 2, int(game.pad_height * 0.36), True, True)
 
-    campaign_rect, score_rect = layout.get_menu_button_rects(game)
+    campaign_rect, _ = layout.get_menu_button_rects(game)
     mouse_pos = pygame.mouse.get_pos()
-    selected_index = getattr(game, "menu_select_index", 0)
-    draw_menu_mode_button(game, campaign_rect, "이순신 시뮬레이션", selected_index == 0, campaign_rect.collidepoint(mouse_pos))
-    draw_menu_mode_button(game, score_rect, "점수 경쟁", selected_index == 1, score_rect.collidepoint(mouse_pos))
+    draw_menu_mode_button(game, campaign_rect, "이순신 시뮬레이션", True, campaign_rect.collidepoint(mouse_pos))
+
+
+# 모드 선택 화면을 그립니다.
+# mode_select_index에 따라 story/com/back 중 한 장을 전체 화면에 표시합니다.
+def draw_mode_select(game, draw_sea_background):
+    selected = getattr(game, "mode_select_index", 0)
+    if selected == 1:
+        image = game.images.get("com_mode")
+    elif selected == 2:
+        image = game.images.get("mode_back")
+    else:
+        image = game.images.get("story_mode")
+
+    if image:
+        layout.draw_cover(game, image)
+        return
+
+    # 이미지가 없는 경우 최소 동작 가능한 폴백 UI를 그립니다.
+    draw_sea_background(game)
+    draw_text(game, "모드 선택", 46, WHITE, game.pad_width // 2, int(game.pad_height * 0.2), True, True)
+    options = ["스토리 모드", "점수 경쟁 모드", "뒤로"]
+    base_y = int(game.pad_height * 0.42)
+    for i, label in enumerate(options):
+        color = YELLOW if i == selected else GRAY
+        draw_text(game, label, 32, color, game.pad_width // 2, base_y + i * 56, True, True)
 
 
 # 메인 메뉴의 버튼 하나를 그립니다.

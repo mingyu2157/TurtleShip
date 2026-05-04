@@ -62,7 +62,7 @@ class Game:
         self.scaled_image_cache = {}
         self.audio_enabled = False
 
-        # 현재 게임 상태입니다. menu, stage_select, story, play, gameover, clear 같은 문자열로 구분합니다.
+        # 현재 게임 상태입니다. menu, mode_select, stage_select, story, play, gameover, clear 같은 문자열로 구분합니다.
         # stage_select는 캠페인 스테이지를 고르는 화면이고, story는 해전 브리핑 화면입니다.
         # stage_result는 스테이지 클리어 후 점수/피격/스킬 사용량을 보여주는 결과 화면입니다.
         # render.py와 input.py는 이 값을 보고 "어떤 화면을 그릴지", "키가 무슨 의미인지" 결정합니다.
@@ -114,6 +114,7 @@ class Game:
         # cleared_stage_count는 이미 클리어한 스테이지 개수입니다.
         self.unlocked_stage_count = 1
         self.cleared_stage_count = 0
+        self.mode_select_index = 0
         self.stage_select_index = 0
         self.menu_select_index = 0
         self.pause_select_index = 0

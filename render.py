@@ -35,6 +35,8 @@ def draw_screen(game):
 
     if game.game_state == "menu":
         ui.draw_menu(game, draw_sea_background)
+    elif game.game_state == "mode_select":
+        ui.draw_mode_select(game, draw_sea_background)
     elif game.game_state == "stage_select":
         ui.draw_stage_select(game, draw_sea_background)
     elif game.game_state == "story":
