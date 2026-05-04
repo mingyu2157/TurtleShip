@@ -29,6 +29,9 @@ from stages import get_kills_to_boss, get_stage_boss_name, get_stage_display_nam
 # 숫자가 낮을수록 일기가 천천히 쓰이는 느낌이 강해집니다.
 STORY_TYPING_CHARS_PER_SECOND = 24
 
+# 일시정지 메뉴 버튼 순서입니다. input.py도 같은 순서를 사용합니다.
+PAUSE_MENU_ITEMS = ("계속하기", "재시작", "나가기")
+
 # 새 일기지 이미지 위에 올릴 진한 먹색입니다.
 DIARY_INK = (23, 15, 9)
 # 본문 보조 글자도 배경과 섞이지 않게 기존보다 어둡게 둡니다.
@@ -334,6 +337,67 @@ def draw_menu_mode_button(game, rect, label, selected, hovered):
     pygame.draw.rect(game.screen, button_color, rect, border_radius=8)
     pygame.draw.rect(game.screen, border_color, rect, 4 if selected else 3, border_radius=8)
     draw_text(game, label, max(20, rect.height // 3), WHITE, rect.centerx, rect.centery, True, True)
+
+
+# 플레이 화면 위에 올라오는 일시정지 메뉴입니다.
+# 전투 장면을 흐리게 덮고, 검은 패널과 금색 선으로 제공된 예시 이미지와 비슷한 분위기를 냅니다.
+def draw_pause_menu(game):
+    shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
+    shade.fill((0, 0, 0, 164))
+    game.screen.blit(shade, (0, 0))
+
+    panel, buttons = layout.get_pause_menu_layout(game)
+    panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
+    panel_surface.fill((7, 10, 12, 238))
+    game.screen.blit(panel_surface, panel)
+
+    gold = (229, 169, 55)
+    bright_gold = (255, 217, 110)
+    dark_gold = (126, 75, 18)
+    pygame.draw.rect(game.screen, dark_gold, panel.inflate(10, 10), 3, border_radius=8)
+    pygame.draw.rect(game.screen, bright_gold, panel, 2, border_radius=8)
+    pygame.draw.rect(game.screen, dark_gold, panel.inflate(-18, -18), 1, border_radius=5)
+
+    crest_y = panel.top + 28
+    pygame.draw.circle(game.screen, (14, 15, 15), (panel.centerx, crest_y), 38)
+    pygame.draw.circle(game.screen, bright_gold, (panel.centerx, crest_y), 38, 2)
+    pygame.draw.circle(game.screen, dark_gold, (panel.centerx, crest_y), 27, 1)
+    draw_text(game, "龍", 30, gold, panel.centerx, crest_y, True, True)
+
+    title_size = 54 if panel.width >= 500 else 43
+    title_y = panel.top + max(88, panel.height // 5)
+    draw_text(game, "일시정지", title_size, bright_gold, panel.centerx, title_y, True, True)
+    line_y = title_y + 54
+    pygame.draw.line(game.screen, dark_gold, (panel.left + 42, line_y), (panel.right - 42, line_y), 1)
+    pygame.draw.line(game.screen, bright_gold, (panel.centerx - 36, line_y), (panel.centerx + 36, line_y), 2)
+
+    mouse_pos = pygame.mouse.get_pos()
+    selected_index = getattr(game, "pause_select_index", 0)
+    for index, rect in enumerate(buttons):
+        hovered = rect.collidepoint(mouse_pos)
+        selected = index == selected_index
+        draw_pause_button(game, rect, PAUSE_MENU_ITEMS[index], selected, hovered)
+
+
+# 일시정지 메뉴 버튼 하나를 그립니다.
+def draw_pause_button(game, rect, label, selected, hovered):
+    active = selected or hovered
+    fill = (15, 16, 17, 238) if not active else (28, 22, 12, 248)
+    border = (255, 204, 76) if active else (180, 119, 31)
+    inner_border = (112, 69, 19)
+
+    button_surface = pygame.Surface(rect.size, pygame.SRCALPHA)
+    button_surface.fill(fill)
+    game.screen.blit(button_surface, rect)
+    pygame.draw.rect(game.screen, border, rect, 3 if active else 2, border_radius=4)
+    pygame.draw.rect(game.screen, inner_border, rect.inflate(-12, -12), 1, border_radius=3)
+
+    accent_y = rect.centery
+    pygame.draw.circle(game.screen, border, (rect.left + 32, accent_y), 4)
+    pygame.draw.line(game.screen, border, (rect.left + 18, accent_y), (rect.left + 46, accent_y), 1)
+    pygame.draw.circle(game.screen, border, (rect.right - 32, accent_y), 4)
+    pygame.draw.line(game.screen, border, (rect.right - 46, accent_y), (rect.right - 18, accent_y), 1)
+    draw_text(game, label, max(27, rect.height // 2), (255, 219, 128), rect.centerx, rect.centery, True, True)
 
 
 # 현재 전투에서 레벨업했을 때 3개 증강 선택지를 보여줍니다.

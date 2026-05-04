@@ -99,10 +99,7 @@ def draw_game(game):
         ui.draw_text(game, game.message_text, 30, YELLOW, game.pad_width // 2, int(game.pad_height * 0.72), True, True)
 
     if game.paused:
-        shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 145))
-        game.screen.blit(shade, (0, 0))
-        ui.draw_text(game, "일시정지", 48, WHITE, game.pad_width // 2, game.pad_height // 2 - 20, True, True)
+        ui.draw_pause_menu(game)
 
 
 # 스테이지 이미지가 없을 때 사용하는 기본 바다 배경입니다.

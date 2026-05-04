@@ -20,6 +20,7 @@ import assets
 import combat
 import layout
 import skills
+import ui
 from settings import MIN_PAD_HEIGHT, MIN_PAD_WIDTH
 from stages import STAGE_MAX
 
@@ -63,6 +64,21 @@ def move_choice_selection(game, direction, choice_count):
 
     current = getattr(game, "choice_select_index", 0)
     game.choice_select_index = (current + direction) % choice_count
+
+
+# 일시정지 메뉴에서 선택한 항목을 실행합니다.
+def activate_pause_menu_item(game, index):
+    if index == 0:
+        game.paused = False
+        return
+
+    if index == 1:
+        actors.restart_current_play(game)
+        return
+
+    if index == 2:
+        actors.open_stage_select(game)
+        assets.stop_music(game)
 
 
 # 키를 눌렀을 때 실행됩니다.
@@ -198,14 +214,24 @@ def handle_key_down(game, event):
             sys.exit()
         return
 
-    if event.key == pygame.K_ESCAPE:
-        # 플레이 중 Esc는 종료가 아니라 스테이지 선택 화면으로 돌아갑니다.
-        actors.open_stage_select(game)
-        assets.stop_music(game)
+    if game.game_state == "play" and game.paused:
+        if event.key in (pygame.K_UP, pygame.K_w):
+            game.pause_select_index = (getattr(game, "pause_select_index", 0) - 1) % len(ui.PAUSE_MENU_ITEMS)
+            return
+        if event.key in (pygame.K_DOWN, pygame.K_s):
+            game.pause_select_index = (getattr(game, "pause_select_index", 0) + 1) % len(ui.PAUSE_MENU_ITEMS)
+            return
+        if event.key == pygame.K_RETURN:
+            activate_pause_menu_item(game, getattr(game, "pause_select_index", 0))
+            return
+        if event.key in (pygame.K_ESCAPE, pygame.K_p):
+            game.paused = False
+            return
         return
 
-    if event.key == pygame.K_p:
-        game.paused = not game.paused
+    if game.game_state == "play" and event.key in (pygame.K_ESCAPE, pygame.K_p):
+        game.paused = True
+        game.pause_select_index = 0
         return
 
     if game.game_state != "play" or game.paused:
@@ -298,5 +324,14 @@ def handle_mouse_down(game, pos):
         actors.open_stage_select(game)
         return
 
-    if game.game_state == "play" and not game.paused:
+    if game.game_state == "play":
+        if game.paused:
+            _, buttons = layout.get_pause_menu_layout(game)
+            for index, rect in enumerate(buttons):
+                if rect.collidepoint(pos):
+                    game.pause_select_index = index
+                    activate_pause_menu_item(game, index)
+                    return
+            return
+
         combat.shoot_player_bullet(game)

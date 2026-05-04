@@ -237,3 +237,26 @@ def get_stage_select_card_rects(game, stage_count):
         rects.append(rect)
 
     return rects
+
+
+# 일시정지 메뉴의 중앙 패널과 버튼 위치를 계산합니다.
+# 화면이 작아도 버튼이 서로 겹치지 않도록 패널 높이와 버튼 간격을 함께 줄입니다.
+def get_pause_menu_layout(game):
+    panel_width = min(560, int(game.pad_width * 0.86))
+    panel_height = min(520, int(game.pad_height * 0.74))
+    panel = pygame.Rect(0, 0, panel_width, panel_height)
+    panel.center = (game.pad_width // 2, game.pad_height // 2)
+
+    button_width = int(panel.width * 0.78)
+    button_height = max(54, min(72, panel.height // 7))
+    gap = max(14, min(28, panel.height // 18))
+    total_button_height = button_height * 3 + gap * 2
+    start_y = panel.centery - total_button_height // 2 + int(panel.height * 0.11)
+
+    buttons = []
+    for index in range(3):
+        rect = pygame.Rect(0, start_y + index * (button_height + gap), button_width, button_height)
+        rect.centerx = panel.centerx
+        buttons.append(rect)
+
+    return panel, buttons
