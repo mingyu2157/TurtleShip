@@ -6,10 +6,15 @@
 # 초보자 포인트:
 #   여러 파일에서 같은 숫자나 색상을 직접 쓰면 나중에 수정하기 어렵습니다.
 #   이렇게 설정 파일에 모아두면 한 곳만 바꿔도 전체 게임에 적용됩니다.
+#
+# 공부 순서:
+#   이 파일은 함수가 거의 없고 "상수"만 있습니다.
+#   색, 기본 창 크기, 에셋 폴더 위치처럼 게임 전체가 공유하는 값을 여기서 찾으면 됩니다.
 from pathlib import Path
 
 
 # RGB 색상값입니다. pygame은 (빨강, 초록, 파랑) 튜플로 색을 표현합니다.
+# 예를 들어 WHITE = (245, 247, 255)는 빨강 245, 초록 247, 파랑 255라는 뜻입니다.
 BLACK = (0, 0, 0)
 WHITE = (245, 247, 255)
 GRAY = (170, 178, 195)
@@ -26,6 +31,7 @@ MIN_PAD_HEIGHT = 560
 FPS = 60
 
 # 프로젝트 기준 경로와 이미지/오디오 폴더 위치입니다.
+# BASE_DIR은 settings.py가 들어 있는 프로젝트 폴더입니다.
 BASE_DIR = Path(__file__).resolve().parent
 IMAGE_DIR = BASE_DIR / "assets" / "images"
 AUDIO_DIR = BASE_DIR / "assets" / "audio"

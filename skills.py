@@ -1,72 +1,430 @@
 # skills.py
 # 역할:
-#   필살기 입력, 필살기 충전량, 필살기 효과를 관리합니다.
-#   지금 준비된 필살기는 폭탄처럼 적과 적 탄환을 지우고 잠깐 무적이 되는 방식입니다.
+#   학익진, 몸빵, 치유, 생즉사 사즉생 같은 전술/스킬을 관리합니다.
+#   저장형 지원선 시스템은 제거했고, 이제 학익진/몸빵/치유는 증강으로 해금되는 전술입니다.
 #
-# 현재 상태:
-#   ULTIMATE_ENABLED 값이 False라서 실제 게임에서는 아직 필살기가 발동하지 않습니다.
-#   나중에 True로 바꾸면 E 키, 왼쪽 Ctrl, 오른쪽 Ctrl로 발동할 수 있습니다.
+# 초보자 포인트:
+#   스킬은 보통 세 부분으로 나뉩니다.
+#   1. 어떤 키가 눌렸는지 확인합니다.
+#   2. 사용할 수 있는 상태인지 검사합니다.
+#   3. 사용할 수 있다면 타이머를 켜고, update_skills()가 매 프레임 효과를 유지합니다.
+#
+# 공부 순서:
+#   is_*_key() 함수로 입력 키를 보고,
+#   try_use_*() 함수로 발동 조건을 보고,
+#   update_skills()와 update_hakikjin_ships()로 지속 효과를 보면 됩니다.
+import math
+import random
+
 import pygame
 
 import assets
+import layout
+import projectiles
+import results
 
 
+# 필살기 기능은 아직 본격 도입 전이라 기본값은 꺼둡니다.
 ULTIMATE_ENABLED = False
 ULTIMATE_MAX = 100
 ULTIMATE_SCANCODES = {8, 224, 228}
 ULTIMATE_KEYS = {pygame.K_e, pygame.K_LCTRL, pygame.K_RCTRL}
 
+# 4단계부터 한 번 발동 가능한 생존 패시브입니다.
+LAST_STAND_STAGE_INDEX = 3
+LAST_STAND_HEAL_RATIO = 0.10
+LAST_STAND_INVINCIBLE_SECONDS = 2.5
+LAST_STAND_DAMAGE_SECONDS = 8.0
+LAST_STAND_DAMAGE_MULTIPLIER = 10.0
+LAST_STAND_REVIVE_CHANCE = 0.35
+LAST_STAND_REVIVE_RATIO = 0.42
 
-# 게임을 새로 시작할 때 필살기 관련 값을 초기화합니다.
-# ultimate_charge는 현재 충전량, ultimate_max는 발동에 필요한 최대 충전량입니다.
+# 명량해전 직전 스토리 뒤에 플레이어가 고를 수 있는 생즉사 사즉생 선택지입니다.
+LAST_STAND_CHOICES = [
+    {
+        "id": "damage",
+        "title": "죽고자 하면 살 것이다",
+        "description": "체력 10% 이하에서 1회 발동. 잠깐 무적 + 8초 동안 공격력 10배.",
+    },
+    {
+        "id": "revive",
+        "title": "살고자 하면 죽는다",
+        "description": "체력 0이 될 때 35% 확률로 1회 부활. 성공 시 체력 42% 회복.",
+    },
+]
+
+# 학익진은 Q/ㅂ 키로 발동합니다.
+HAKIKJIN_SCANCODES = {20}
+HAKIKJIN_KEYS = {pygame.K_q}
+HAKIKJIN_DURATION = 5.0
+HAKIKJIN_COOLDOWN = 14.0
+HAKIKJIN_SHIP_COUNT = 12
+HAKIKJIN_FIRE_INTERVAL = 0.22
+HAKIKJIN_SHIP_SIZE = (34, 92)
+
+# 몸빵은 Z/ㅋ 키로 발동합니다.
+TANKER_SCANCODES = {29}
+TANKER_KEYS = {pygame.K_z}
+TANKER_DURATION = 4.0
+TANKER_COOLDOWN = 10.0
+
+# 치유는 X/ㅌ 키로 발동합니다.
+HEALER_SCANCODES = {27}
+HEALER_KEYS = {pygame.K_x}
+HEALER_DURATION = 5.0
+HEALER_COOLDOWN = 14.0
+HEALER_HEAL_PER_SECOND = 18.0
+
+
+# 스킬 관련 상태를 초기화합니다.
 def reset_skills(game):
+    # 수동 필살기 충전량입니다.
     game.ultimate_max = ULTIMATE_MAX
     game.ultimate_charge = 0
+    # 무적 타이머입니다.
     game.ultimate_invincible_timer = 0
+    # 생즉사 사즉생 패시브가 이번 판에 쓰였는지입니다.
+    game.last_stand_used = False
+    game.last_stand_damage_timer = 0.0
+    game.last_stand_damage_multiplier = 1.0
+    # 학익진 지속/쿨타임과 실제 진형선 목록입니다.
+    game.hakikjin_timer = 0.0
+    game.hakikjin_cooldown = 0.0
+    game.hakikjin_ships = []
+    # 몸빵 방패선 지속/쿨타임과 표시용 Rect입니다.
+    game.tanker_guard_timer = 0.0
+    game.tanker_guard_cooldown = 0.0
+    game.tanker_guard_rect = None
+    # 치유 지속/쿨타임입니다.
+    game.healer_timer = 0.0
+    game.healer_cooldown = 0.0
+
+
+# 키보드 이벤트가 학익진 키인지 확인합니다.
+def is_hakikjin_key(event):
+    typed = getattr(event, "unicode", "")
+    return (
+        event.key in HAKIKJIN_KEYS
+        or typed.lower() == "q"
+        or typed == "ㅂ"
+        or getattr(event, "scancode", None) in HAKIKJIN_SCANCODES
+    )
+
+
+# 키보드 이벤트가 몸빵 키인지 확인합니다.
+def is_tanker_key(event):
+    typed = getattr(event, "unicode", "")
+    return (
+        event.key in TANKER_KEYS
+        or typed.lower() == "z"
+        or typed == "ㅋ"
+        or getattr(event, "scancode", None) in TANKER_SCANCODES
+    )
+
+
+# 키보드 이벤트가 치유 키인지 확인합니다.
+def is_healer_key(event):
+    typed = getattr(event, "unicode", "")
+    return (
+        event.key in HEALER_KEYS
+        or typed.lower() == "x"
+        or typed == "ㅌ"
+        or getattr(event, "scancode", None) in HEALER_SCANCODES
+    )
 
 
 # 키보드 이벤트가 필살기 키인지 확인합니다.
-# event.key는 현재 입력 언어의 영향을 받을 수 있고,
-# scancode는 물리 키 위치를 보기 때문에 한글 입력 상태에서도 인식하기 좋습니다.
 def is_ultimate_key(event):
     return event.key in ULTIMATE_KEYS or getattr(event, "scancode", None) in ULTIMATE_SCANCODES
 
 
-# 필살기 관련 시간 값을 매 프레임 줄입니다.
-# 지금은 무적 시간이 지나가도록 ultimate_invincible_timer만 관리합니다.
+# 학익진이 현재 판 증강으로 해금되어 있는지 확인합니다.
+def is_hakikjin_unlocked(game):
+    # 학익진은 이제 캠페인 진행도 저장이 아니라 "학익진 전술" 증강을 골랐을 때만 켜집니다.
+    return getattr(game, "hakikjin_unlocked", False)
+
+
+# Q/ㅂ를 눌렀을 때 학익진을 발동합니다.
+def try_use_hakikjin(game):
+    if is_stage_handicap_active(game):
+        show_stage_handicap_message(game)
+        return False
+
+    if not is_hakikjin_unlocked(game):
+        game.message_text = "학익진 증강 필요"
+        game.message_timer = 1.2
+        return False
+
+    if getattr(game, "hakikjin_cooldown", 0) > 0:
+        game.message_text = f"학익진 재정비 {game.hakikjin_cooldown:.0f}초"
+        game.message_timer = 1.0
+        return False
+
+    game.hakikjin_timer = HAKIKJIN_DURATION
+    game.hakikjin_cooldown = HAKIKJIN_COOLDOWN
+    create_hakikjin_ships(game)
+    results.record_skill_use(game, "hakikjin")
+    game.message_text = "학익진 전개"
+    game.message_timer = 1.4
+    assets.play_sound(game, "ultimate", 0.75)
+    return True
+
+
+# Z/ㅋ를 눌렀을 때 몸빵 방패선을 발동합니다.
+def try_use_tanker_guard(game):
+    if is_stage_handicap_active(game):
+        show_stage_handicap_message(game)
+        return False
+
+    if not getattr(game, "tanker_skill_unlocked", False):
+        game.message_text = "몸빵 증강 필요"
+        game.message_timer = 1.1
+        return False
+
+    if getattr(game, "tanker_guard_cooldown", 0) > 0:
+        game.message_text = f"몸빵 재정비 {game.tanker_guard_cooldown:.0f}초"
+        game.message_timer = 1.0
+        return False
+
+    game.tanker_guard_timer = TANKER_DURATION + getattr(game, "augment_guard_bonus", 0)
+    game.tanker_guard_cooldown = TANKER_COOLDOWN
+    update_tanker_guard_rect(game)
+    results.record_skill_use(game, "tanker")
+    game.message_text = "몸빵 전개"
+    game.message_timer = 1.1
+    assets.play_stage_sound(game, "skill", 0.65)
+    return True
+
+
+# X/ㅌ를 눌렀을 때 치유를 발동합니다.
+def try_use_healer(game):
+    if is_stage_handicap_active(game):
+        show_stage_handicap_message(game)
+        return False
+
+    if not getattr(game, "healer_skill_unlocked", False):
+        game.message_text = "치유 증강 필요"
+        game.message_timer = 1.1
+        return False
+
+    if getattr(game, "healer_cooldown", 0) > 0:
+        game.message_text = f"치유 재정비 {game.healer_cooldown:.0f}초"
+        game.message_timer = 1.0
+        return False
+
+    game.healer_timer = HEALER_DURATION
+    game.healer_cooldown = HEALER_COOLDOWN
+    results.record_skill_use(game, "healer")
+    game.message_text = "치유 시작"
+    game.message_timer = 1.1
+    assets.play_stage_sound(game, "skill", 0.65)
+    return True
+
+
+# 매 프레임 스킬 타이머와 지속 효과를 갱신합니다.
 def update_skills(game, dt):
     game.ultimate_invincible_timer = max(0, getattr(game, "ultimate_invincible_timer", 0) - dt)
+    game.stage_handicap_timer = max(0, getattr(game, "stage_handicap_timer", 0) - dt)
+    game.last_stand_damage_timer = max(0, getattr(game, "last_stand_damage_timer", 0) - dt)
+    if getattr(game, "last_stand_damage_timer", 0) <= 0:
+        game.last_stand_damage_multiplier = 1.0
+    game.hakikjin_timer = max(0, getattr(game, "hakikjin_timer", 0) - dt)
+    game.hakikjin_cooldown = max(0, getattr(game, "hakikjin_cooldown", 0) - dt)
+    game.tanker_guard_timer = max(0, getattr(game, "tanker_guard_timer", 0) - dt)
+    game.tanker_guard_cooldown = max(0, getattr(game, "tanker_guard_cooldown", 0) - dt)
+    game.healer_timer = max(0, getattr(game, "healer_timer", 0) - dt)
+    game.healer_cooldown = max(0, getattr(game, "healer_cooldown", 0) - dt)
+
+    update_hakikjin_ships(game, dt)
+    update_tanker_guard(game)
+    update_healer_effect(game, dt)
 
 
-# 적을 파괴했을 때 필살기 충전량을 올리는 함수입니다.
-# ULTIMATE_ENABLED가 False면 충전도 하지 않아서 현재 플레이에는 영향이 없습니다.
+# 학익진 진형선 12척을 현재 전투 영역에 배치합니다.
+def create_hakikjin_ships(game):
+    combat_area = layout.get_combat_area(game)
+    ships = []
+    for index in range(HAKIKJIN_SHIP_COUNT):
+        x, y = get_hakikjin_position(combat_area, index, HAKIKJIN_SHIP_COUNT)
+        rect = pygame.Rect(0, 0, *HAKIKJIN_SHIP_SIZE)
+        rect.center = (int(x), int(y))
+        ships.append({"rect": rect, "cooldown": 0.0})
+    game.hakikjin_ships = ships
+
+
+# 둥근 학익진 위치를 계산합니다.
+def get_hakikjin_position(area, index, count):
+    ratio = index / max(1, count - 1)
+    angle = math.radians(165 + (15 - 165) * ratio)
+    radius_x = area.width * 0.46
+    radius_y = area.height * 0.42
+    center_x = area.centerx
+    center_y = area.top + area.height * 0.34
+    x = center_x + math.cos(angle) * radius_x
+    y = center_y + math.sin(angle) * radius_y
+    return x, y
+
+
+# 학익진 진형선들이 자동으로 사격하게 합니다.
+def update_hakikjin_ships(game, dt):
+    if getattr(game, "hakikjin_timer", 0) <= 0:
+        game.hakikjin_ships = []
+        return
+
+    interval_bonus = getattr(game, "augment_hakikjin_bonus", 0) * 0.035
+    fire_interval = max(0.18, HAKIKJIN_FIRE_INTERVAL - interval_bonus)
+    for ship in getattr(game, "hakikjin_ships", []):
+        ship["cooldown"] = max(0, ship.get("cooldown", 0) - dt)
+        if ship["cooldown"] <= 0:
+            fire_hakikjin_bullet(game, ship)
+            ship["cooldown"] = fire_interval
+
+
+# 학익진 배 한 척이 가장 가까운 적이나 보스를 향해 탄환을 쏩니다.
+def fire_hakikjin_bullet(game, ship):
+    target = get_skill_fire_target(game, ship["rect"])
+    if target is None:
+        return
+
+    target_x, target_y = target
+    dx = target_x - ship["rect"].centerx
+    dy = target_y - ship["rect"].centery
+    length = max(1, math.sqrt(dx * dx + dy * dy))
+    stage = game.current_stage()
+    projectiles.make_player_bullet(
+        game,
+        ship["rect"].centerx,
+        ship["rect"].centery,
+        dx / length * 820,
+        dy / length * 820,
+        52,
+        5,
+        stage["bullet_color"],
+        image_padding=4,
+    )
+
+
+# 스킬 사격이 노릴 목표를 정합니다.
+def get_skill_fire_target(game, source_rect):
+    if getattr(game, "boss", None) is not None:
+        return game.boss["rect"].center
+
+    if getattr(game, "enemies", []):
+        nearest = min(
+            game.enemies,
+            key=lambda enemy: (
+                (enemy["rect"].centerx - source_rect.centerx) ** 2
+                + (enemy["rect"].centery - source_rect.centery) ** 2
+            ),
+        )
+        return nearest["rect"].center
+
+    return None
+
+
+# 몸빵 방패선 위치를 플레이어 앞에 맞춥니다.
+def update_tanker_guard(game):
+    if getattr(game, "tanker_guard_timer", 0) <= 0:
+        game.tanker_guard_rect = None
+        return
+    update_tanker_guard_rect(game)
+
+
+# 몸빵 방패선 Rect를 실제로 계산합니다.
+def update_tanker_guard_rect(game):
+    if not getattr(game, "player", None):
+        return
+    rect = pygame.Rect(0, 0, 128, 52)
+    rect.centerx = game.player["rect"].centerx
+    rect.bottom = game.player["rect"].top - 12
+    rect.clamp_ip(layout.get_combat_area(game).inflate(-8, -8))
+    game.tanker_guard_rect = rect
+
+
+# 치유가 켜져 있으면 플레이어 체력을 천천히 회복합니다.
+def update_healer_effect(game, dt):
+    if getattr(game, "healer_timer", 0) <= 0 or not getattr(game, "player", None):
+        return
+    heal = HEALER_HEAL_PER_SECOND + getattr(game, "augment_heal_bonus", 0)
+    max_hp = game.player.get("maxHp", 0)
+    game.player["hp"] = min(max_hp, game.player.get("hp", max_hp) + heal * dt)
+
+
+# 4단계부터 한 번만 발동하는 생존 이벤트입니다.
+def try_use_last_stand(game):
+    if getattr(game, "stage_index", 0) < LAST_STAND_STAGE_INDEX:
+        return False
+    if getattr(game, "last_stand_used", False):
+        return False
+    max_hp = game.player.get("maxHp", 0)
+    if max_hp <= 0:
+        return False
+
+    choice = getattr(game, "last_stand_choice", "damage")
+    if choice == "revive":
+        # 부활 선택지는 체력이 완전히 0이 되었을 때만 판정합니다.
+        # 10% 이하에서 자동으로 공격력 버프가 켜지는 공격형 선택지와 역할을 분리합니다.
+        if game.player.get("hp", 0) > 0:
+            return False
+        game.last_stand_used = True
+        results.record_skill_use(game, "last_stand")
+        if random.random() <= LAST_STAND_REVIVE_CHANCE:
+            game.player["hp"] = max(1, int(max_hp * LAST_STAND_REVIVE_RATIO))
+            game.ultimate_invincible_timer = max(getattr(game, "ultimate_invincible_timer", 0), LAST_STAND_INVINCIBLE_SECONDS)
+            game.message_text = "생즉사 사즉생: 부활"
+            game.message_timer = 2.0
+            assets.play_sound(game, "ultimate", 0.75)
+            return True
+        game.message_text = "생즉사 사즉생 실패"
+        game.message_timer = 1.4
+        return False
+
+    game.last_stand_used = True
+    results.record_skill_use(game, "last_stand")
+    game.player["hp"] = max(1, int(max_hp * LAST_STAND_HEAL_RATIO))
+    game.ultimate_invincible_timer = max(getattr(game, "ultimate_invincible_timer", 0), LAST_STAND_INVINCIBLE_SECONDS)
+    game.last_stand_damage_timer = LAST_STAND_DAMAGE_SECONDS
+    game.last_stand_damage_multiplier = LAST_STAND_DAMAGE_MULTIPLIER
+    game.message_text = "생즉사 사즉생"
+    game.message_timer = 2.0
+    assets.play_sound(game, "ultimate", 0.75)
+    return True
+
+
+# 명량해전 초반 고립 구간처럼 전술 스킬을 잠시 막는 상태인지 확인합니다.
+def is_stage_handicap_active(game):
+    return getattr(game, "stage_handicap_timer", 0) > 0
+
+
+# 전술 스킬이 막힌 상태에서 키를 눌렀을 때 안내합니다.
+def show_stage_handicap_message(game):
+    game.message_text = f"고립 전투 {game.stage_handicap_timer:.0f}초"
+    game.message_timer = 1.0
+
+
+# 적을 파괴했을 때 필살기 충전량을 올립니다.
 def add_ultimate_charge(game, amount):
     if not ULTIMATE_ENABLED:
         return
-
     game.ultimate_charge = min(getattr(game, "ultimate_max", ULTIMATE_MAX), getattr(game, "ultimate_charge", 0) + amount)
 
 
-# 필살기 키를 눌렀을 때 실제로 발동 가능한지 확인합니다.
-# 충전량이 가득 차 있으면 trigger_bomb()을 실행하고 충전량을 0으로 되돌립니다.
+# 필살기 키를 눌렀을 때 폭탄형 필살기를 시도합니다.
 def try_use_ultimate(game):
     if not ULTIMATE_ENABLED or getattr(game, "ultimate_charge", 0) < getattr(game, "ultimate_max", ULTIMATE_MAX):
         return False
-
     trigger_bomb(game)
+    results.record_skill_use(game, "ultimate")
     game.ultimate_charge = 0
     return True
 
 
 # 폭탄형 필살기 효과입니다.
-# 일반 적과 적 탄환을 지우고, 보스가 있다면 보호막을 없앤 뒤 체력을 일부 깎습니다.
 def trigger_bomb(game):
     game.enemies = []
     game.enemy_projectiles = []
     game.ultimate_invincible_timer = 2.0
-
     if game.boss is not None:
         game.boss["shield"] = 0
         game.boss["hp"] = max(0, game.boss["hp"] - 600)
-
     assets.play_sound(game, "ultimate", 0.85)
