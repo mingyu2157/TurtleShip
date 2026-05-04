@@ -76,10 +76,65 @@ def get_font(game, size, bold=False):
     return font
 
 
+# 스토리 화면 전용 폰트를 가져옵니다.
+# 프로젝트에 Joseon100Years/ChosunCentennial 폰트 파일이 있으면 우선 사용하고,
+# 없으면 기존 get_font 폴백을 사용합니다.
+def get_story_font(game, size, bold=False):
+    key = ("story", size, bold)
+    if key in game.fonts:
+        return game.fonts[key]
+
+    root = Path(__file__).resolve().parent
+    fonts_dir = root / "assets" / "fonts"
+    candidates = [
+        fonts_dir / "Joseon100Years.ttf",
+        fonts_dir / "Joseon100Years.otf",
+        fonts_dir / "ChosunCentennial.ttf",
+        fonts_dir / "ChosunCentennial.otf",
+        # 사용자가 내려받아 둔 실제 파일명 패턴도 함께 지원합니다.
+        fonts_dir / "ChosunCentennial_ttf.ttf",
+        fonts_dir / "ChosunCentennial_otf.otf",
+        Path("C:/Windows/Fonts/batang.ttc"),
+        Path("C:/Windows/Fonts/gungsuh.ttf"),
+        Path("/System/Library/Fonts/Supplemental/AppleMyungjo.ttf"),
+        Path("/usr/share/fonts/truetype/nanum/NanumMyeongjo.ttf"),
+    ]
+
+    # assets/fonts 안의 모든 폰트 파일(.ttf/.otf/.ttc)을 후보에 추가합니다.
+    # 파일명이 달라도 스토리 전용 폰트가 적용되도록 안전장치로 둡니다.
+    if fonts_dir.exists():
+        for extension in ("*.ttf", "*.otf", "*.ttc"):
+            for path in sorted(fonts_dir.glob(extension)):
+                if path not in candidates:
+                    candidates.append(path)
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            font = pygame.font.Font(str(candidate), size)
+            font.set_bold(bold)
+            game.fonts[key] = font
+            return font
+        except pygame.error:
+            continue
+
+    # 시스템에서 세리프 계열 한글 폰트를 먼저 찾고, 실패하면 기본 폰트를 사용합니다.
+    font_path = pygame.font.match_font("batang,gungsuh,nanumgothic,malgungothic")
+    if font_path:
+        font = pygame.font.Font(font_path, size)
+        font.set_bold(bold)
+    else:
+        font = get_font(game, size, bold)
+
+    game.fonts[key] = font
+    return font
+
+
 # 화면에 글자를 그리는 공통 함수입니다.
 # center=True면 x, y를 글자의 중심으로 쓰고, False면 왼쪽 위 좌표로 씁니다.
-def draw_text(game, text, size, color, x, y, center=False, bold=False):
-    font = get_font(game, size, bold)
+def draw_text(game, text, size, color, x, y, center=False, bold=False, font_getter=None):
+    font = (font_getter or get_font)(game, size, bold)
     # font.render()는 글자를 pygame Surface 이미지로 바꿉니다.
     image = font.render(text, True, color)
     rect = image.get_rect()
@@ -133,8 +188,8 @@ def wrap_text(font, text, max_width):
 
 # 지정한 사각형 안에 여러 줄 문장을 그립니다.
 # 반환값은 마지막 줄 아래 y 좌표라서 다음 문장을 이어 그릴 때 사용할 수 있습니다.
-def draw_wrapped_text(game, text, size, color, rect, line_gap=8, bold=False):
-    font = get_font(game, size, bold)
+def draw_wrapped_text(game, text, size, color, rect, line_gap=8, bold=False, font_getter=None):
+    font = (font_getter or get_font)(game, size, bold)
     y = rect.top
     line_height = font.get_linesize()
 
@@ -695,14 +750,14 @@ def draw_story(game, draw_sea_background):
     sub_color = DIARY_MUTED_INK if diary_image else GRAY
     accent_color = DIARY_ACCENT if diary_image else YELLOW
 
-    draw_text(game, data["kicker"], 17, accent_color, x, y, False, True)
+    draw_text(game, data["kicker"], 17, accent_color, x, y, False, True, get_story_font)
     # 여러 편 스토리 구조일 때 현재 몇 편을 보고 있는지 작게 표시합니다.
     page_text = f"{story.get_current_story_page_index(game) + 1}/{story.get_story_page_count(game)}"
-    draw_text(game, page_text, 15, sub_color, panel.right - margin - 42, y + 1, False, True)
+    draw_text(game, page_text, 15, sub_color, panel.right - margin - 42, y + 1, False, True, get_story_font)
     y += 28
-    draw_text(game, data["title"], title_size, main_color, x, y, False, True)
+    draw_text(game, data["title"], title_size, main_color, x, y, False, True, get_story_font)
     y += title_size + 18
-    draw_text(game, data["date"], 18, accent_color if diary_image else BLUE, x, y, False, True)
+    draw_text(game, data["date"], 18, accent_color if diary_image else BLUE, x, y, False, True, get_story_font)
     y += 34
 
     visible_blocks = get_visible_story_blocks(game, data)
@@ -717,18 +772,18 @@ def draw_story(game, draw_sea_background):
     quote_rect = pygame.Rect(x + 16, y, content_width - 16, 82)
     line_color = (137, 91, 50) if diary_image else (92, 104, 124)
     pygame.draw.line(game.screen, line_color, (x, y - 2), (x, y + 74), 4)
-    quote_y = draw_wrapped_text(game, visible_quote, quote_size, main_color, quote_rect, 4, True)
+    quote_y = draw_wrapped_text(game, visible_quote, quote_size, main_color, quote_rect, 4, True, get_story_font)
     y = max(y + 82, quote_y + 12)
 
     for line in visible_lines:
         line_rect = pygame.Rect(x, y, content_width, 90)
-        y = draw_wrapped_text(game, line, body_size, sub_color, line_rect, 5)
+        y = draw_wrapped_text(game, line, body_size, sub_color, line_rect, 5, False, get_story_font)
         y += 10
 
     footer_y = panel.bottom - margin - 48
     next_text = story.get_story_next_text(game)
-    draw_text(game, next_text, 18, main_color, x, footer_y, False, True)
-    prompt_font = get_font(game, 16, True)
+    draw_text(game, next_text, 18, main_color, x, footer_y, False, True, get_story_font)
+    prompt_font = get_story_font(game, 16, True)
     if getattr(game, "story_typing_complete", True):
         prompt = f"{story.get_story_prompt(game)}  Enter / 클릭"
     else:
