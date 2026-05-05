@@ -63,6 +63,11 @@ STAGE_SELECT_STATE_IMAGE_NAMES = [
 
 COMMON_IMAGE_NAMES = [
     "main_menu",
+    # 모드 선택 화면:
+    #   mode_back.png는 뒤로 버튼 선택 상태, story_mode.png/com_mode.png는 각 모드 선택 상태입니다.
+    "mode_back",
+    "story_mode",
+    "com_mode",
     # menu_start_button.png:
     #   메인 메뉴에서 이순신 시뮬레이션 시작 버튼 이미지로 사용합니다.
     #   이미지 자체에 "게임 시작" 글자가 들어 있으면 ui.py가 별도 글자를 덮지 않습니다.

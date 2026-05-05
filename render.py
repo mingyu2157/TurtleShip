@@ -51,6 +51,8 @@ def draw_screen(game):
 
     if game.game_state == "menu":
         ui.draw_menu(game, draw_sea_background)
+    elif game.game_state == "mode_select":
+        ui.draw_mode_select(game, draw_sea_background)
     elif game.game_state == "score_name_input":
         ui.draw_score_name_input(game, draw_sea_background)
     elif game.game_state == "score_leaderboard":

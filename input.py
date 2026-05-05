@@ -68,13 +68,18 @@ def handle_event(game, event):
 # 마우스가 움직일 때 메뉴/선택 화면의 포커스 인덱스를 갱신합니다.
 def handle_mouse_motion(game, pos):
     if game.game_state == "menu":
-        campaign_rect, score_rect = layout.get_menu_button_rects(game)
-        over_clickable = campaign_rect.collidepoint(pos) or score_rect.collidepoint(pos)
+        set_menu_cursor(layout.get_start_button_rect(game).collidepoint(pos))
+        return
+
+    if game.game_state == "mode_select":
+        _, buttons = layout.get_mode_select_layout(game)
+        over_clickable = False
+        for index, rect in enumerate(buttons):
+            if rect.collidepoint(pos):
+                game.mode_select_index = index
+                over_clickable = True
+                break
         set_menu_cursor(over_clickable)
-        if campaign_rect.collidepoint(pos):
-            game.menu_select_index = 0
-        elif score_rect.collidepoint(pos):
-            game.menu_select_index = 1
         return
 
     if game.game_state == "stage_select":
@@ -149,6 +154,26 @@ def activate_stage_selection(game, stage_index):
         actors.show_locked_stage_message(game, stage_index)
 
 
+def open_mode_select(game):
+    game.game_state = "mode_select"
+    game.mode_select_index = max(0, min(getattr(game, "mode_select_index", 0), 1))
+    game.message_text = ""
+    game.message_timer = 0
+    assets.play_menu_music(game)
+
+
+def activate_mode_selection(game, index):
+    game.mode_select_index = max(0, min(index, 2))
+    assets.play_stage_sound(game, "shoot", 0.45)
+    if game.mode_select_index == 0:
+        actors.open_stage_select(game)
+    elif game.mode_select_index == 1:
+        actors.open_score_name_input(game)
+    else:
+        game.game_state = "menu"
+        assets.play_menu_music(game)
+
+
 def handle_text_input(game, text):
     if game.game_state != "score_name_input":
         return
@@ -188,32 +213,40 @@ def handle_key_down(game, event):
         game.held_scancodes.add(event.scancode)
 
     if game.game_state == "menu":
-        if event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_w, pygame.K_s):
-            game.menu_select_index = 1 - getattr(game, "menu_select_index", 0)
-            return
-        if event.key == pygame.K_1:
+        if event.key in (pygame.K_RETURN, pygame.K_SPACE):
             assets.play_stage_sound(game, "shoot", 0.45)
-            actors.open_stage_select(game)
-            return
-        if event.key == pygame.K_2:
-            assets.play_stage_sound(game, "shoot", 0.45)
-            actors.open_score_name_input(game)
-            return
-        if event.key == pygame.K_RETURN:
-            assets.play_stage_sound(game, "shoot", 0.45)
-            if getattr(game, "menu_select_index", 0) == 0:
-                actors.open_stage_select(game)
-            else:
-                actors.open_score_name_input(game)
+            open_mode_select(game)
             return
         if event.key == pygame.K_ESCAPE:
             pygame.quit()
             sys.exit()
         return
 
-    if game.game_state == "score_name_input":
+    if game.game_state == "mode_select":
+        if event.key in (pygame.K_UP, pygame.K_LEFT, pygame.K_w, pygame.K_a):
+            game.mode_select_index = (getattr(game, "mode_select_index", 0) - 1) % 3
+            return
+        if event.key in (pygame.K_DOWN, pygame.K_RIGHT, pygame.K_s, pygame.K_d):
+            game.mode_select_index = (getattr(game, "mode_select_index", 0) + 1) % 3
+            return
+        if event.key == pygame.K_1:
+            activate_mode_selection(game, 0)
+            return
+        if event.key == pygame.K_2:
+            activate_mode_selection(game, 1)
+            return
+        if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            activate_mode_selection(game, getattr(game, "mode_select_index", 0))
+            return
         if event.key == pygame.K_ESCAPE:
             game.game_state = "menu"
+            assets.play_menu_music(game)
+            return
+        return
+
+    if game.game_state == "score_name_input":
+        if event.key == pygame.K_ESCAPE:
+            game.game_state = "mode_select"
             assets.play_menu_music(game)
             return
         if event.key == pygame.K_BACKSPACE:
@@ -231,7 +264,7 @@ def handle_key_down(game, event):
             actors.start_score_mode(game)
             return
         if event.key == pygame.K_ESCAPE:
-            game.game_state = "menu"
+            game.game_state = "mode_select"
             assets.play_menu_music(game)
             return
         return
@@ -297,8 +330,7 @@ def handle_key_down(game, event):
         # 스테이지 선택 화면에서는 숫자키, 방향키, Enter를 사용합니다.
         # 잠긴 스테이지를 고르면 actors.py가 안내 메시지를 띄우고 시작하지 않습니다.
         if event.key == pygame.K_ESCAPE:
-            game.game_state = "menu"
-            assets.play_menu_music(game)
+            open_mode_select(game)
             return
 
         if pygame.K_1 <= event.key <= pygame.K_5:
@@ -415,13 +447,17 @@ def handle_key_up(game, event):
 # 메뉴에서는 시작 버튼 클릭, 플레이 중에는 발사로 사용합니다.
 def handle_mouse_down(game, pos):
     if game.game_state == "menu":
-        campaign_rect, score_rect = layout.get_menu_button_rects(game)
-        if campaign_rect.collidepoint(pos):
+        if layout.get_start_button_rect(game).collidepoint(pos):
             assets.play_stage_sound(game, "shoot", 0.45)
-            actors.open_stage_select(game)
-        elif score_rect.collidepoint(pos):
-            assets.play_stage_sound(game, "shoot", 0.45)
-            actors.open_score_name_input(game)
+            open_mode_select(game)
+        return
+
+    if game.game_state == "mode_select":
+        _, buttons = layout.get_mode_select_layout(game)
+        for index, rect in enumerate(buttons):
+            if rect.collidepoint(pos):
+                activate_mode_selection(game, index)
+                break
         return
 
     if game.game_state == "score_name_input":

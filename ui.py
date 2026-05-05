@@ -282,6 +282,29 @@ def draw_text_fit_in_rect(game, text, size, color, rect, center=True, bold=True,
     return draw_text_in_rect(game, text, current_size, color, rect, center, bold, font_getter)
 
 
+def draw_text_fit_visual_center_in_rect(game, text, size, color, rect, bold=True, font_getter=None, min_size=12):
+    text = str(text)
+    current_size = size
+    while current_size > min_size:
+        font = (font_getter or get_font)(game, current_size, bold)
+        if font.size(text)[0] <= rect.width and font.get_height() <= rect.height:
+            break
+        current_size -= 1
+
+    font = (font_getter or get_font)(game, current_size, bold)
+    text = trim_text_to_width(font, text, rect.width)
+    image = font.render(text, True, color)
+    ink_rect = image.get_bounding_rect()
+    image_rect = image.get_rect()
+    if ink_rect.width > 0 and ink_rect.height > 0:
+        image_rect.left = int(rect.centerx - ink_rect.centerx)
+        image_rect.top = int(rect.centery - ink_rect.centery)
+    else:
+        image_rect.center = rect.center
+    game.screen.blit(image, image_rect)
+    return image_rect
+
+
 # 지정한 사각형 안에 이미지를 꽉 채워 그립니다.
 # 이미지 비율은 유지하고, 넘치는 부분은 잘라서 카드/패널 안에 빈 공간이 생기지 않게 합니다.
 def draw_image_cover_in_rect(game, image, rect):
@@ -318,18 +341,6 @@ def draw_image_contain_in_rect(game, image, rect):
     scaled = assets.get_scaled_image(game, image, (scaled_width, scaled_height))
     # get_rect(center=...)를 쓰면 남는 여백 안에서 이미지가 자연스럽게 가운데 정렬됩니다.
     game.screen.blit(scaled, scaled.get_rect(center=rect.center))
-
-
-def get_image_contain_rect(image, rect):
-    if image is None or rect.width <= 0 or rect.height <= 0:
-        return pygame.Rect(rect)
-
-    scale = min(rect.width / image.get_width(), rect.height / image.get_height())
-    scaled_width = max(1, int(image.get_width() * scale))
-    scaled_height = max(1, int(image.get_height() * scale))
-    image_rect = pygame.Rect(0, 0, scaled_width, scaled_height)
-    image_rect.center = rect.center
-    return image_rect
 
 
 def get_image_cover_rect_in_rect(image, rect):
@@ -446,7 +457,7 @@ def show_splash(game):
 
 
 # 메인 메뉴 화면을 그립니다.
-# main_menu.png에는 이미 "게임 시작" 버튼이 그려져 있으므로 선택 테두리만 덧그립니다.
+# main_menu.png에는 이미 "게임 시작" 버튼이 그려져 있으므로 메인에서는 그 버튼만 보여줍니다.
 def draw_menu(game, draw_sea_background):
     menu_image = game.images.get("main_menu")
     if menu_image:
@@ -456,14 +467,53 @@ def draw_menu(game, draw_sea_background):
         draw_text(game, "PyShooting", 52, WHITE, game.pad_width // 2, int(game.pad_height * 0.28), True, True)
         draw_text(game, "거북선 전쟁", 26, YELLOW, game.pad_width // 2, int(game.pad_height * 0.36), True, True)
 
-    campaign_rect, score_rect = layout.get_menu_button_rects(game)
+    start_rect = layout.get_start_button_rect(game)
     mouse_pos = pygame.mouse.get_pos()
-    selected_index = getattr(game, "menu_select_index", 0)
     if menu_image:
-        draw_menu_baked_button_highlight(game, campaign_rect, selected_index == 0, campaign_rect.collidepoint(mouse_pos))
+        draw_menu_baked_button_highlight(game, start_rect, True, start_rect.collidepoint(mouse_pos))
     else:
-        draw_menu_mode_button(game, campaign_rect, "이순신 시뮬레이션", selected_index == 0, campaign_rect.collidepoint(mouse_pos))
-    draw_menu_mode_button(game, score_rect, "점수 경쟁", selected_index == 1, score_rect.collidepoint(mouse_pos))
+        draw_menu_mode_button(game, start_rect, "게임 시작", True, start_rect.collidepoint(mouse_pos))
+
+
+def draw_mode_select(game, draw_sea_background):
+    selected_index = max(0, min(getattr(game, "mode_select_index", 0), 2))
+    mode_images = (
+        game.images.get("story_mode"),
+        game.images.get("com_mode"),
+        game.images.get("mode_back"),
+    )
+    mode_image = mode_images[selected_index] or game.images.get("mode_back")
+    if mode_image:
+        layout.draw_cover(game, mode_image)
+        return
+
+    menu_image = game.images.get("main_menu")
+    if menu_image:
+        layout.draw_cover(game, menu_image)
+    else:
+        draw_sea_background(game)
+
+    shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
+    shade.fill((0, 0, 0, 138))
+    game.screen.blit(shade, (0, 0))
+
+    panel, buttons = layout.get_mode_select_layout(game)
+    panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
+    panel_surface.fill((10, 14, 20, 232))
+    game.screen.blit(panel_surface, panel)
+    pygame.draw.rect(game.screen, (255, 218, 124), panel, 3, border_radius=8)
+    pygame.draw.rect(game.screen, (118, 75, 24), panel.inflate(-18, -18), 1, border_radius=6)
+
+    draw_text(game, "모드 선택", max(34, panel.height // 8), (255, 220, 142), panel.centerx, panel.top + max(58, panel.height // 6), True, True)
+
+    mouse_pos = pygame.mouse.get_pos()
+    selected_index = max(0, min(getattr(game, "mode_select_index", 0), len(buttons) - 1))
+    labels = ("이순신 시뮬레이션", "점수 경쟁", "뒤로")
+    for index, rect in enumerate(buttons):
+        draw_menu_mode_button(game, rect, labels[index], selected_index == index, rect.collidepoint(mouse_pos))
+
+    hint_y = panel.bottom - max(34, panel.height // 10)
+    draw_text(game, "Enter / 클릭으로 선택    Esc 뒤로", max(15, panel.height // 24), GRAY, panel.centerx, hint_y, True, True)
 
 
 def draw_menu_baked_button_highlight(game, rect, selected, hovered):
@@ -479,9 +529,9 @@ def draw_menu_baked_button_highlight(game, rect, selected, hovered):
 # 메인 메뉴의 버튼 하나를 그립니다.
 # selected는 키보드로 선택된 상태이고, hovered는 마우스가 올라간 상태입니다.
 def draw_menu_mode_button(game, rect, label, selected, hovered):
-    start_button_image = game.images.get("menu_start_button") if label == "이순신 시뮬레이션" else None
+    start_button_image = game.images.get("menu_start_button") if label == "게임 시작" else None
     if start_button_image:
-        # 제공받은 "게임 시작" 버튼 이미지를 캠페인 시작 버튼에 그대로 사용합니다.
+        # 제공받은 "게임 시작" 버튼 이미지는 메인 시작 버튼에만 그대로 사용합니다.
         # 이미지 안에 글자가 있으므로 별도 텍스트는 덮어쓰지 않습니다.
         draw_image_cover_in_rect(game, start_button_image, rect)
         if selected or hovered:
@@ -1127,8 +1177,8 @@ def draw_stage_result_image_values(game, result, drawn_rect, source_size):
         rect = scale_source_rect(drawn_rect, source_size, STAGE_RESULT_VALUE_RECTS[key])
         size = total_font_size if key == "total_score" else font_size
         shadow_rect = rect.move(max(1, drawn_rect.width // 900), max(1, drawn_rect.height // 900))
-        draw_text_fit_in_rect(game, text, size, shadow_color, shadow_rect, True, True, get_story_font)
-        draw_text_fit_in_rect(game, text, size, value_color, rect, True, True, get_story_font)
+        draw_text_fit_visual_center_in_rect(game, text, size, shadow_color, shadow_rect, True, get_story_font)
+        draw_text_fit_visual_center_in_rect(game, text, size, value_color, rect, True, get_story_font)
 
 
 def format_result_time(seconds):

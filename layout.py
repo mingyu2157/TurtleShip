@@ -123,17 +123,9 @@ def get_combat_area(game):
 # 메인 메뉴 이미지 위의 "게임 시작" 버튼 위치를 계산합니다.
 # 이미지가 없을 때는 화면 크기에 맞춘 기본 버튼 위치를 사용합니다.
 def get_start_button_rect(game):
-    # 예전 코드와 호환되도록 첫 번째 메뉴 버튼을 시작 버튼으로 돌려줍니다.
-    campaign_rect, _ = get_menu_button_rects(game)
-    return campaign_rect
-
-
-# 메인 메뉴의 두 모드 버튼 위치를 계산합니다.
-def get_menu_button_rects(game):
     menu_image = game.images.get("main_menu")
     if menu_image:
-        # source_rect는 원본 메인 이미지 안에서 버튼이 놓인 좌표입니다.
-        # 이미지가 화면에 확대/축소되므로 버튼 좌표도 같은 scale로 변환합니다.
+        # main_menu.png 안에 그려진 기존 "게임 시작" 버튼 위치입니다.
         source_rect = (898, 584, 386, 92)
         scale = max(game.pad_width / menu_image.get_width(), game.pad_height / menu_image.get_height())
         width = int(menu_image.get_width() * scale)
@@ -147,15 +139,53 @@ def get_menu_button_rects(game):
             int(source_rect[3] * scale),
         )
         if rect.colliderect(pygame.Rect(0, 0, game.pad_width, game.pad_height)):
-            score_rect = rect.move(0, int(rect.height * 1.18))
-            if score_rect.bottom > game.pad_height - 24:
-                score_rect = rect.move(0, -int(rect.height * 1.18))
-            return rect, score_rect
+            return rect
 
     rect = pygame.Rect(0, 0, min(380, int(game.pad_width * 0.72)), 68)
     rect.center = (game.pad_width // 2, int(game.pad_height * 0.60))
-    score_rect = rect.move(0, rect.height + 14)
-    return rect, score_rect
+    return rect
+
+
+# cover 방식으로 그려진 이미지 안의 원본 좌표 사각형을 현재 화면 좌표로 변환합니다.
+def get_cover_source_rect(game, image, source_rect):
+    drawn_rect, scale = get_cover_rect(game, image)
+    return pygame.Rect(
+        drawn_rect.left + int(source_rect[0] * scale),
+        drawn_rect.top + int(source_rect[1] * scale),
+        int(source_rect[2] * scale),
+        int(source_rect[3] * scale),
+    )
+
+
+# 모드 선택 창과 그 안의 두 모드 버튼 위치를 계산합니다.
+def get_mode_select_layout(game):
+    mode_image = game.images.get("mode_back") or game.images.get("story_mode") or game.images.get("com_mode")
+    if mode_image:
+        # 원본 1672x941 모드 선택 이미지 안의 클릭 영역입니다.
+        source_rects = (
+            (330, 290, 520, 500),
+            (830, 290, 520, 500),
+            (1215, 792, 420, 120),
+        )
+        screen_rect = pygame.Rect(0, 0, game.pad_width, game.pad_height)
+        buttons = [get_cover_source_rect(game, mode_image, source_rect).clip(screen_rect) for source_rect in source_rects]
+        return screen_rect, buttons
+
+    panel_width = min(760, int(game.pad_width * 0.78))
+    panel_height = min(500, int(game.pad_height * 0.66))
+    panel = pygame.Rect(0, 0, panel_width, panel_height)
+    panel.center = (game.pad_width // 2, game.pad_height // 2)
+
+    button_width = min(panel.width - 96, 520)
+    button_height = max(66, min(90, panel.height // 5))
+    gap = max(18, panel.height // 16)
+    start_y = panel.centery - int(button_height * 1.55) - gap
+    buttons = []
+    for index in range(3):
+        rect = pygame.Rect(0, start_y + index * (button_height + gap), button_width, button_height)
+        rect.centerx = panel.centerx
+        buttons.append(rect)
+    return panel, buttons
 
 
 # 증강 선택 화면에서 3개 카드 위치를 계산합니다.

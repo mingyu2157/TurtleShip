@@ -117,6 +117,7 @@ class Game:
         self.cleared_stage_count = 0
         self.stage_select_index = 0
         self.menu_select_index = 0
+        self.mode_select_index = 0
         self.pause_select_index = 0
         self.score_nickname = ""
         self.score_name_input = ""
