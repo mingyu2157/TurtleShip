@@ -54,6 +54,13 @@ AUGMENT_CARD_IMAGE_NAMES = [
 ]
 
 # 모든 스테이지에서 공통으로 사용할 이미지 이름입니다.
+STAGE_SELECT_STATE_IMAGE_NAMES = [
+    "stage_select_u1_s1",
+    *[f"stage_select_u{unlocked}_s{selected}" for unlocked in range(2, 6) for selected in range(1, unlocked + 1)],
+    *[f"stage_select_complete_s{selected}" for selected in range(1, 6)],
+]
+
+
 COMMON_IMAGE_NAMES = [
     "main_menu",
     # menu_start_button.png:
@@ -72,9 +79,13 @@ COMMON_IMAGE_NAMES = [
     # 배경.png:
     #   스테이지 선택 화면 전용 배경 이미지입니다. stage_select_background 대신 우선 사용됩니다.
     "배경",
-    # 잘금_2.png ~ 잘금_5.png:
+    # stage_select_u3_s2.png:
+    #   진행도와 현재 선택 스테이지가 반영된 완성형 스테이지 선택 화면입니다.
+    #   있으면 개별 카드 조립 대신 이 이미지를 화면 전체에 사용합니다.
+    *STAGE_SELECT_STATE_IMAGE_NAMES,
+    # 잠금_2.png ~ 잠금_5.png:
     #   해당 스테이지가 잠겼을 때 카드 자리에 표시되는 이미지입니다.
-    *[f"잘금_{n}" for n in range(2, 6)],
+    *[f"잠금_{n}" for n in range(2, 6)],
     # 글귀_1.png ~ 글귀_5.png:
     #   스테이지를 가리킬 때 화면 하단에 표시되는 해전 명언/글귀 이미지입니다.
     *[f"글귀_{n}" for n in range(1, 6)],
@@ -102,6 +113,13 @@ COMMON_IMAGE_NAMES = [
     #   전투 중 왼쪽 사이드 영역에 표시하는 세로형 요약지 이미지입니다.
     #   현재 출전 직전 가로 일기에 나온 내용을 짧게 요약해서 보여줍니다.
     "story_summary_vertical",
+    # 전투 중 오른쪽 정보 UI와 Q/Z/X 스킬 아이콘입니다.
+    "right_ui_panel",
+    "skill_icon_q",
+    "skill_icon_z",
+    "skill_icon_x",
+    "leaderboard_background",
+    "leaderboard_background_vertical",
     # story_intro.png:
     #   도입 스토리 전용 이미지 슬롯입니다.
     #   지금 캠페인 흐름에서는 주로 스테이지별 스토리를 보지만, 도입부를 다시 쓸 때 바로 연결됩니다.

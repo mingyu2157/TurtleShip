@@ -86,7 +86,7 @@ Space가 자동 선택되지 않고 Enter 또는 클릭으로 다음 화면으�
 1단계 내부 phase:
 stage_phase = 0이면 1-1 사천포해전입니다.
 stage_phase = 1이면 1-2 당포해전입니다.
-stages.py의 phase_names, phase_bosses, phase_traits, phase_kills_to_boss, phase_boss_hp, phase_boss_shield 값으로 조정합니다.
+stages.py의 phase_names, phase_kills_to_boss, phase_boss_hp, phase_boss_shield 값으로 조정합니다.
 
 4. 조작 방식
 

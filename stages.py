@@ -29,8 +29,6 @@ STAGE_INFO = [
     {
         "name": "1단계 사천포·당포해전",
         "phase_names": ("1-1단계 사천포해전", "1-2단계 당포해전"),
-        "phase_bosses": ("도쿠이 미치유키 지휘선", "가메이 고레노리 대장선"),
-        "phase_traits": ("산 위 항전 + 약한 화살", "높은 누각 + 부채 보상"),
         "phase_kills_to_boss": (10, 14),
         "phase_boss_hp": (340, 460),
         "phase_boss_shield": (0, 55),
@@ -114,26 +112,6 @@ def get_stage_display_name(game):
         phase = min(get_stage_phase(game), len(phase_names) - 1)
         return phase_names[phase]
     return stage["name"]
-
-
-# 1단계 내부 전투마다 다른 미니보스 이름을 보여주기 위한 함수입니다.
-def get_stage_boss_name(game):
-    stage = game.current_stage()
-    phase_bosses = stage.get("phase_bosses")
-    if phase_bosses:
-        phase = min(get_stage_phase(game), len(phase_bosses) - 1)
-        return phase_bosses[phase]
-    return stage["boss"]
-
-
-# HUD/등장 배너에 표시할 보스 특징도 phase별로 바꿀 수 있게 합니다.
-def get_stage_trait(game):
-    stage = game.current_stage()
-    phase_traits = stage.get("phase_traits")
-    if phase_traits:
-        phase = min(get_stage_phase(game), len(phase_traits) - 1)
-        return phase_traits[phase]
-    return stage["trait"]
 
 
 # 현재 스테이지에서 보스 등장 전까지 필요한 격침 수를 가져옵니다.

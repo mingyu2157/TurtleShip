@@ -23,7 +23,23 @@ import ui
 import waves
 import weather
 from settings import RED, WHITE, YELLOW
-from stages import get_stage_boss_name, get_stage_display_name, get_stage_trait
+from stages import get_stage_display_name
+
+
+STAGE_ONE_ARROW_TIP_ANGLE = 135.0
+STAGE_ONE_ARROW_OUTLINE_COLOR = (255, 218, 118, 118)
+STAGE_ONE_ARROW_SHADOW_COLOR = (10, 4, 2, 92)
+STAGE_ONE_ARROW_SHADOW_OFFSETS = ((1, 1),)
+STAGE_ONE_ARROW_OUTLINE_OFFSETS = (
+    (-1, -1),
+    (0, -1),
+    (1, -1),
+    (-1, 0),
+    (1, 0),
+    (-1, 1),
+    (0, 1),
+    (1, 1),
+)
 
 
 # 현재 게임 상태에 맞는 화면을 그립니다.
@@ -35,6 +51,10 @@ def draw_screen(game):
 
     if game.game_state == "menu":
         ui.draw_menu(game, draw_sea_background)
+    elif game.game_state == "score_name_input":
+        ui.draw_score_name_input(game, draw_sea_background)
+    elif game.game_state == "score_leaderboard":
+        ui.draw_score_leaderboard_start(game, draw_sea_background)
     elif game.game_state == "stage_select":
         ui.draw_stage_select(game, draw_sea_background)
     elif game.game_state == "story":
@@ -53,6 +73,8 @@ def draw_screen(game):
         ui.draw_end_screen(game, False, draw_sea_background)
     elif game.game_state == "clear":
         ui.draw_end_screen(game, True, draw_sea_background)
+    elif game.game_state == "leaderboard":
+        ui.draw_leaderboard(game, draw_sea_background)
 
 
 # 실제 플레이 화면을 그립니다.
@@ -92,8 +114,6 @@ def draw_game(game):
     if game.stage_banner_timer > 0:
         # stage_banner_timer가 남아 있는 동안 스테이지 이름을 잠깐 크게 보여줍니다.
         ui.draw_text(game, get_stage_display_name(game), 36, WHITE, game.pad_width // 2, game.pad_height // 2 - 30, True, True)
-        boss_text = f"미니보스: {get_stage_boss_name(game)} / {get_stage_trait(game)}"
-        ui.draw_text(game, boss_text, 21, YELLOW, game.pad_width // 2, game.pad_height // 2 + 12, True)
 
     if game.message_timer > 0:
         ui.draw_text(game, game.message_text, 30, YELLOW, game.pad_width // 2, int(game.pad_height * 0.72), True, True)
@@ -356,7 +376,6 @@ def draw_weather_event(game, event):
 
 
 # 미니보스를 그립니다.
-# 보스 이름과 특징 문구도 같이 표시합니다.
 def draw_boss(game):
     stage = game.current_stage()
     rect = game.boss["rect"]
@@ -370,9 +389,6 @@ def draw_boss(game):
         pygame.draw.rect(game.screen, (62, 37, 48), rect, border_radius=10)
         pygame.draw.rect(game.screen, stage["color"], rect, 4, border_radius=10)
         pygame.draw.circle(game.screen, RED, (rect.centerx, rect.centery), min(rect.width, rect.height) // 4)
-
-    ui.draw_text(game, game.boss.get("name", get_stage_boss_name(game)), 22, WHITE, rect.centerx, rect.centery - 12, True, True)
-    ui.draw_text(game, game.boss.get("trait", get_stage_trait(game)), 16, YELLOW, rect.centerx, rect.centery + 18, True)
 
 
 # 적 또는 보스 탄환을 그립니다.
@@ -390,10 +406,41 @@ def draw_enemy_projectile(game, projectile):
             draw_rect = rect.inflate(12, 12)
         # 적 탄환 이미지도 같은 크기가 많이 반복되므로 캐시를 사용합니다.
         scaled = assets.get_scaled_image(game, image, draw_rect.size)
-        game.screen.blit(scaled, scaled.get_rect(center=rect.center))
+        if game.stage_index == 0:
+            scaled = rotate_stage_one_arrow(scaled, projectile)
+            draw_stage_one_arrow_projectile(game, scaled, rect.center)
+        else:
+            game.screen.blit(scaled, scaled.get_rect(center=rect.center))
     else:
         pygame.draw.circle(game.screen, (77, 30, 42), rect.center, projectile["radius"])
         pygame.draw.circle(game.screen, projectile["color"], rect.center, projectile["radius"], 2)
+
+
+def draw_stage_one_arrow_projectile(game, image, center):
+    base_rect = image.get_rect(center=center)
+    silhouette = get_stage_one_arrow_silhouette(image, STAGE_ONE_ARROW_OUTLINE_COLOR)
+    shadow = get_stage_one_arrow_silhouette(image, STAGE_ONE_ARROW_SHADOW_COLOR)
+
+    for dx, dy in STAGE_ONE_ARROW_SHADOW_OFFSETS:
+        game.screen.blit(shadow, base_rect.move(dx, dy))
+    for dx, dy in STAGE_ONE_ARROW_OUTLINE_OFFSETS:
+        game.screen.blit(silhouette, base_rect.move(dx, dy))
+    game.screen.blit(image, base_rect)
+
+
+def get_stage_one_arrow_silhouette(image, color):
+    mask = pygame.mask.from_surface(image, 24)
+    return mask.to_surface(setcolor=color, unsetcolor=(0, 0, 0, 0)).convert_alpha()
+
+
+def rotate_stage_one_arrow(image, projectile):
+    vx = projectile.get("vx", 0)
+    vy = projectile.get("vy", 0)
+    if vx == 0 and vy == 0:
+        return image
+
+    direction_angle = math.degrees(math.atan2(vy, vx))
+    return pygame.transform.rotozoom(image, STAGE_ONE_ARROW_TIP_ANGLE - direction_angle, 1.0)
 
 
 # 학익진 스킬로 잠깐 등장하는 12척의 전술선을 그립니다.

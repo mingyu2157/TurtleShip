@@ -22,7 +22,6 @@ import random
 import pygame
 
 import layout
-import projectiles
 
 
 OBSTACLE_TYPES = [
@@ -207,6 +206,8 @@ def resolve_enemy_collision(game, enemy, previous_rect):
         return
 
     enemy["rect"] = previous_rect.copy()
+    enemy["_move_carry_x"] = 0.0
+    enemy["_move_carry_y"] = 0.0
     enemy["vx"] = -enemy.get("vx", 0) * 0.65
     enemy["drift_x"] = -enemy.get("drift_x", 0) * 0.65
     if abs(enemy["vx"]) < 15:

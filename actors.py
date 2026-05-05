@@ -24,6 +24,7 @@ import obstacles
 import projectiles
 import rewards
 import results
+import scoreboard
 import story
 import waves
 import weather
@@ -33,9 +34,7 @@ from stages import (
     MAX_ENEMIES_ON_SCREEN,
     STAGE_MAX,
     get_kills_to_boss,
-    get_stage_boss_name,
     get_stage_phase,
-    get_stage_trait,
 )
 
 
@@ -53,6 +52,36 @@ def open_stage_select(game):
     game.message_timer = 0
     game.message_text = ""
     # 스테이지 선택 화면 전용 BGM이 있으면 재생하고, 없으면 조용히 둡니다.
+    assets.play_stage_select_music(game)
+
+
+def open_score_name_input(game):
+    game.game_mode = "score"
+    game.game_state = "score_name_input"
+    game.paused = False
+    clear_battlefield(game)
+    previous_name = scoreboard.clean_nickname(getattr(game, "score_nickname", ""))
+    game.score_name_input = "" if previous_name == scoreboard.DEFAULT_NICKNAME else previous_name
+    game.message_text = ""
+    game.message_timer = 0
+    assets.play_menu_music(game)
+
+
+def confirm_score_name(game):
+    nickname = scoreboard.clean_nickname(getattr(game, "score_name_input", ""))
+    game.score_nickname = nickname
+    open_score_leaderboard(game)
+
+
+def open_score_leaderboard(game):
+    game.game_mode = "score"
+    game.game_state = "score_leaderboard"
+    game.paused = False
+    clear_battlefield(game)
+    game.leaderboard_entries = scoreboard.load_scores()
+    game.message_text = ""
+    game.message_timer = 0
+    assets.play_menu_music(game)
 
 
 
@@ -107,6 +136,7 @@ def reset_stage_run(game):
     game.stage_total_kills = 0
     game.stage_phase = 0
     game.score = 0
+    game.stage_play_time = 0.0
     # 스테이지 결과 화면에 쓸 피격/스킬/발사 기록을 새로 시작합니다.
     results.reset_stage_stats(game)
     game.enemy_spawn_timer = 0
@@ -339,10 +369,12 @@ def apply_stage_start_effects(game):
 # 이 모드는 캠페인 잠금/스토리와 별개로 한 판 동안 경험치와 증강을 사용합니다.
 def start_score_mode(game):
     game.game_mode = "score"
+    game.score_nickname = scoreboard.clean_nickname(getattr(game, "score_nickname", ""))
     campaign.apply_progress_to_game(game)
     game.stage_index = 0
     game.stage_phase = 0
     game.stage_total_kills = 0
+    game.stage_play_time = 0.0
     game.basic_ability_choices = []
     game.basic_ability_chosen = False
     game.basic_ability_augment_id = None
@@ -355,6 +387,7 @@ def start_score_mode(game):
     game.stage_banner_timer = 2.0
     game.message_timer = 0
     game.message_text = "점수 경쟁 시작"
+    game.leaderboard_last_rank = None
     game.paused = False
     results.reset_stage_stats(game)
     clear_battlefield(game)
@@ -475,6 +508,10 @@ def advance_to_next_stage_phase(game):
 # 결과 화면에서 Enter 또는 클릭을 눌렀을 때 다음 화면으로 이동합니다.
 def close_stage_result(game):
     result = getattr(game, "stage_result", {})
+    if getattr(game, "game_mode", "campaign") == "score":
+        open_score_leaderboard(game)
+        return
+
     if result.get("final_clear"):
         # 마지막 스테이지 결과 화면 다음에는 전체 캠페인 클리어 화면으로 이동합니다.
         end_game(game, True)
@@ -493,6 +530,16 @@ def end_game(game, clear):
     # 게임오버/전체 클리어 화면에서도 점수, 피격 횟수, 스킬 사용량을 보여주기 위해
     # 현재까지의 전투 기록을 end_result 딕셔너리로 묶어 둡니다.
     results.build_end_result(game, clear)
+    if getattr(game, "game_mode", "campaign") == "score":
+        entries, rank = scoreboard.submit_score(getattr(game, "score_nickname", ""), getattr(game, "score", 0))
+        game.leaderboard_entries = entries
+        game.leaderboard_last_rank = rank
+        game.stage_result = dict(getattr(game, "end_result", {}))
+        game.stage_result["unlock_text"] = "점수 등록 완료"
+        game.game_state = "stage_result"
+        assets.stop_music(game)
+        return
+
     game.game_state = "clear" if clear else "gameover"
     assets.stop_music(game)
 
@@ -613,8 +660,9 @@ def update_enemies(game, dt):
         speed_multiplier = weather.get_speed_multiplier(game, enemy["rect"])
         # drift는 적이 완전 직선으로만 내려오지 않게 하는 좌우 흔들림입니다.
         drift = math.sin(enemy["age"] * 2.6) * dt
-        enemy["rect"].x += int((enemy["vx"] * dt + enemy["drift_x"] * drift) * speed_multiplier)
-        enemy["rect"].y += int((enemy["vy"] * dt + enemy["drift_y"] * drift) * speed_multiplier)
+        move_x = (enemy["vx"] * dt + enemy["drift_x"] * drift) * speed_multiplier
+        move_y = (enemy["vy"] * dt + enemy["drift_y"] * drift) * speed_multiplier
+        apply_enemy_motion(enemy, move_x, move_y)
         # 태풍이 등장해 전장 파도가 거세진 경우 적도 파도 영향을 조금 받습니다.
         wave_multiplier = weather.get_wave_influence_multiplier(game, enemy["rect"])
         if wave_multiplier > 1:
@@ -655,10 +703,26 @@ def keep_enemy_inside_lane(enemy, combat_area):
         enemy["rect"].left = combat_area.left
         enemy["vx"] = abs(enemy["vx"]) * 0.55
         enemy["drift_x"] = abs(enemy["drift_x"]) * 0.55
+        enemy["_move_carry_x"] = 0.0
     elif enemy["rect"].right > combat_area.right:
         enemy["rect"].right = combat_area.right
         enemy["vx"] = -abs(enemy["vx"]) * 0.55
         enemy["drift_x"] = -abs(enemy["drift_x"]) * 0.55
+        enemy["_move_carry_x"] = 0.0
+
+
+# 비처럼 속도가 낮아져도 소수점 이동량을 누적해 적이 0픽셀로 멈추지 않게 합니다.
+def apply_enemy_motion(enemy, move_x, move_y):
+    enemy["_move_carry_x"] = enemy.get("_move_carry_x", 0.0) + move_x
+    enemy["_move_carry_y"] = enemy.get("_move_carry_y", 0.0) + move_y
+
+    pixel_x = int(enemy["_move_carry_x"])
+    pixel_y = int(enemy["_move_carry_y"])
+    enemy["_move_carry_x"] -= pixel_x
+    enemy["_move_carry_y"] -= pixel_y
+
+    enemy["rect"].x += pixel_x
+    enemy["rect"].y += pixel_y
 
 
 # 일반 적의 발사 타이머를 처리합니다.
@@ -848,8 +912,6 @@ def spawn_boss(game):
     # shotTimer/burstTimer는 각각 단발/패턴 공격까지 남은 시간입니다.
     game.boss = {
         "rect": rect,
-        "name": get_stage_boss_name(game),
-        "trait": get_stage_trait(game),
         "hp": boss_hp,
         "maxHp": boss_hp,
         "shield": boss_shield,
@@ -863,8 +925,8 @@ def spawn_boss(game):
 
     game.enemies = []
     game.enemy_projectiles = []
-    game.message_text = f"{get_stage_boss_name(game)} 등장"
-    game.message_timer = 2.0
+    game.message_text = ""
+    game.message_timer = 0
     assets.play_stage_sound(game, "boss", 0.8)
 
 

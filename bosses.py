@@ -1,11 +1,9 @@
 # bosses.py
 # 역할:
-#   스테이지별 미니보스 이름, 특징, 체력, 보호막, 탄막 패턴을 정합니다.
+#   스테이지별 보스 체력, 보호막, 탄막 패턴을 정합니다.
 #   보스를 실제로 움직이고 탄환을 쏘게 하는 코드는 actors.py와 projectiles.py에 있습니다.
 #
 # 값 설명:
-#   boss: 보스 이름입니다.
-#   trait: HUD/등장 안내에 보여줄 보스 특징입니다.
 #   boss_hp, boss_shield: 보스 체력과 보호막입니다.
 #   pattern: 보스 공격 패턴 이름입니다. actors.py의 shoot_boss_burst()에서 사용합니다.
 #   boss_can_shoot: False면 보스가 탄환을 쏘지 않습니다.
@@ -19,8 +17,6 @@
 #   pattern 값은 actors.py의 shoot_boss_burst()와 update_boss()가 읽어 공격 방식을 바꿉니다.
 BOSS_STAGES = [
     {
-        "boss": "도쿠이 미치유키 지휘선",
-        "trait": "산 위 항전 + 약한 화살",
         "boss_hp": 320,
         "boss_shield": 0,
         "boss_hp_per_score_level": 18,
@@ -34,8 +30,6 @@ BOSS_STAGES = [
         "boss_projectile_speed": 155,
     },
     {
-        "boss": "와키자카 야스하루 함대",
-        "trait": "대열 공격 + 학익진 전술",
         "boss_hp": 560,
         "boss_shield": 120,
         "boss_hp_per_score_level": 24,
@@ -45,8 +39,6 @@ BOSS_STAGES = [
         "pattern": "spread",
     },
     {
-        "boss": "부산포 대형선 4척",
-        "trait": "470여 척 함대 + 강한 파도",
         "boss_hp": 660,
         "boss_shield": 150,
         "boss_hp_per_score_level": 30,
@@ -56,8 +48,6 @@ BOSS_STAGES = [
         "pattern": "fan",
     },
     {
-        "boss": "도도 다카토라 전함",
-        "trait": "133척 포위 + 울돌목 조류",
         "boss_hp": 860,
         "boss_shield": 240,
         "boss_hp_per_score_level": 37,
@@ -67,8 +57,6 @@ BOSS_STAGES = [
         "pattern": "sniper",
     },
     {
-        "boss": "노량 최후 대장선",
-        "trait": "방어막 재생 + 자폭선 엄호",
         "boss_hp": 1220,
         "boss_shield": 420,
         "boss_hp_per_score_level": 48,

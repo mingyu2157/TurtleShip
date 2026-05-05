@@ -20,7 +20,8 @@ from skins import GAME_BACKGROUND_PLAY_RECT
 # 기존 480px 중앙 플레이 폭에서 왼쪽 20%, 오른쪽 20%씩 확장한 값입니다.
 # 480 + 96 + 96 = 672라서, 전투 공간은 넓히되 좌우 HUD/대기 구역은 남겨둡니다.
 MOBILE_PLAY_WIDTH = 672
-SIDE_PANEL_MIN_WIDTH = 150
+SIDE_PANEL_MIN_WIDTH = 230
+CHOICE_IMAGE_INFLATE = (164, 194)
 
 
 # 이미지를 화면에 꽉 차게 덮을 때 필요한 위치와 배율을 계산합니다.
@@ -28,8 +29,9 @@ SIDE_PANEL_MIN_WIDTH = 150
 def get_cover_rect(game, image):
     # 화면과 이미지의 가로/세로 확대 비율 중 더 큰 값을 사용해야 빈 공간 없이 꽉 찹니다.
     scale = max(game.pad_width / image.get_width(), game.pad_height / image.get_height())
-    width = int(image.get_width() * scale)
-    height = int(image.get_height() * scale)
+    # 소수점 버림 때문에 모서리에 1픽셀 빈틈이 생기지 않도록 한 픽셀 여유를 둡니다.
+    width = max(game.pad_width, int(image.get_width() * scale) + 1)
+    height = max(game.pad_height, int(image.get_height() * scale) + 1)
     rect = pygame.Rect(0, 0, width, height)
     rect.center = (game.pad_width // 2, game.pad_height // 2)
     return rect, scale
@@ -184,6 +186,15 @@ def get_augment_choice_rects(game, choice_count):
                 card_height,
             )
         )
+    return rects
+
+
+def get_choice_visual_rects(game, choice_count):
+    rects = []
+    for rect in get_augment_choice_rects(game, choice_count):
+        visual_rect = rect.inflate(*CHOICE_IMAGE_INFLATE)
+        visual_rect.center = rect.center
+        rects.append(visual_rect)
     return rects
 
 

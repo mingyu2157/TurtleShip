@@ -92,6 +92,7 @@ class Game:
         self.stage_total_kills = 0
         self.kill_count = 0
         self.score = 0
+        self.stage_play_time = 0.0
         # current_stage_stats는 이번 스테이지 전투 기록입니다.
         self.current_stage_stats = {}
         # stage_result는 방금 클리어한 스테이지 결과 화면에 표시할 데이터입니다.
@@ -117,6 +118,10 @@ class Game:
         self.stage_select_index = 0
         self.menu_select_index = 0
         self.pause_select_index = 0
+        self.score_nickname = ""
+        self.score_name_input = ""
+        self.leaderboard_entries = []
+        self.leaderboard_last_rank = None
         self.hakikjin_unlocked = False
         self.shoot_cooldown = 0
         self.obstacle_spawn_timer = 0
@@ -232,6 +237,7 @@ def initGame():
 def updateGame(dt):
     # dt는 지난 프레임부터 이번 프레임까지 걸린 시간(초)입니다.
     # 속도 * dt 방식으로 계산하면 컴퓨터가 빠르거나 느려도 움직임이 비슷합니다.
+    game.stage_play_time += dt
     game.stage_banner_timer = max(0, game.stage_banner_timer - dt)
     game.message_timer = max(0, game.message_timer - dt)
     game.shoot_cooldown = max(0, game.shoot_cooldown - dt)

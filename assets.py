@@ -34,6 +34,13 @@ AUDIO_SEARCH_DIRS = (AUDIO_DIR, BASE_DIR / "sound effect")
 # 영어 키 이름과 실제 파일 이름이 다를 수 있어 별칭 목록을 둡니다.
 # 예: typing 키는 typing.mp3 또는 타이핑.mp3를 모두 허용합니다.
 SOUND_NAME_ALIASES = {
+    "shoot": ("shoot", "대포1", "대포2", "총1", "총2", "연사1", "연사2", "화살"),
+    "hit": ("hit", "피격", "충돌"),
+    "destroy": ("destroy", "폭발음1", "폭발음2"),
+    "weather_lightning": ("weather_lightning", "천둥번개"),
+    "boss": ("boss", "보스1", "보스2", "보스3", "보스4", "보스5"),
+    "skill": ("skill", "연사1", "화살"),
+    "ultimate": ("ultimate", "대포2", "총2"),
     "typing": ("typing", "타이핑"),
 }
 
@@ -102,6 +109,18 @@ def find_asset_in_folders(folders, names, extensions):
     return None
 
 
+# 같은 이름을 여러 번 찾고 불러오지 않도록 순서를 유지한 채 중복을 제거합니다.
+def unique_names(names):
+    seen = set()
+    ordered = []
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        ordered.append(name)
+    return ordered
+
+
 # 게임 시작 시 이미지와 효과음을 한 번에 불러옵니다.
 # 불러온 이미지는 images 딕셔너리, 효과음은 sounds 딕셔너리에 저장됩니다.
 def load_assets():
@@ -110,7 +129,7 @@ def load_assets():
     audio_enabled = False
 
     # skins.py에서 사용할 수 있는 이미지 이름 목록을 가져와 전부 한 번씩 찾아봅니다.
-    image_names = COMMON_IMAGE_NAMES + ALLY_IMAGE_NAMES + SKILL_IMAGE_NAMES + stage_image_names(STAGE_MAX)
+    image_names = unique_names(COMMON_IMAGE_NAMES + ALLY_IMAGE_NAMES + SKILL_IMAGE_NAMES + stage_image_names(STAGE_MAX))
     for name in image_names:
         path = find_asset(IMAGE_DIR, [name], IMAGE_EXTENSIONS)
         if not path:
@@ -131,7 +150,8 @@ def load_assets():
         # 대포처럼 자주 나는 소리는 여러 채널을 돌려 써서 앞 소리를 덜 자릅니다.
         pygame.mixer.set_reserved(15)
         audio_enabled = True
-    except pygame.error:
+    except pygame.error as error:
+        print(f"오디오 초기화 실패: {error}")
         audio_enabled = False
 
     if not audio_enabled:
@@ -139,7 +159,7 @@ def load_assets():
         return images, sounds, audio_enabled
 
     # 효과음도 이미지와 같은 방식으로 이름 목록을 돌며 불러옵니다.
-    sound_names = COMMON_SOUND_NAMES + stage_sound_names(STAGE_MAX)
+    sound_names = unique_names(COMMON_SOUND_NAMES + stage_sound_names(STAGE_MAX))
     for name in sound_names:
         candidate_names = SOUND_NAME_ALIASES.get(name, (name,))
         path = find_asset_in_folders(AUDIO_SEARCH_DIRS, candidate_names, AUDIO_EXTENSIONS)
@@ -157,18 +177,18 @@ def load_assets():
 # 오디오 장치가 없거나 파일이 없으면 조용히 넘어가서 게임 실행을 방해하지 않습니다.
 def play_menu_music(game):
     # 대기화면 BGM
-    play_named_music(game, ["pagebgm"], "menu_bgm", 0.4)
+    play_named_music(game, ["pagebgm", "대기음악"], "menu_bgm", 0.4)
 
 
 def play_music(game):
     # 전투화면 BGM
-    play_named_music(game, ["bgm"], "battle_bgm", 0.4)
+    play_named_music(game, ["bgm", "배경음악"], "battle_bgm", 0.4)
 
 # 스테이지 선택 화면용 배경음악을 재생합니다.
 # assets/audio/stage_select_bgm.mp3 파일을 넣으면 자동으로 사용합니다.
 def play_stage_select_music(game):
     # stage_select_bgm이 가장 명확한 이름이고, campaign_bgm은 예비 별칭입니다.
-    play_named_music(game, ["stage_select_bgm", "campaign_bgm"], "stage_select_bgm", 0.36)
+    play_named_music(game, ["stage_select_bgm", "campaign_bgm", "pagebgm", "대기음악"], "stage_select_bgm", 0.36)
 
 
 # 난중일기/스토리 화면용 배경음악을 재생합니다.
@@ -182,6 +202,8 @@ def play_story_music(game):
             "story_intro_bgm",
             "story_bgm",
             "nanjung_bgm",
+            "pagebgm",
+            "대기음악",
         ]
         play_named_music(game, names, f"story_intro_bgm_{intro_page_number}", 0.38)
         return
@@ -201,6 +223,8 @@ def play_story_music(game):
         f"story_stage{stage_number}_bgm",
         "story_bgm",
         "nanjung_bgm",
+        "pagebgm",
+        "대기음악",
     ]
     play_named_music(game, names, f"story_bgm_{stage_number}_{phase_number}_{page_number}", 0.38)
 

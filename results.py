@@ -114,6 +114,7 @@ def build_stage_result(game, newly_unlocked, final_clear):
     skill_uses = stats.get("skill_uses", {})
     # stage_number는 사람이 보는 1부터 시작하는 번호입니다.
     stage_number = game.stage_index + 1
+    score = int(game.score)
 
     # game.stage_result는 화면에 그대로 넘길 결과 데이터입니다.
     game.stage_result = {
@@ -124,7 +125,9 @@ def build_stage_result(game, newly_unlocked, final_clear):
         # stage_name은 결과 화면 제목에 씁니다.
         "stage_name": get_stage_display_name(game),
         # score는 현재 스테이지 점수입니다.
-        "score": int(game.score),
+        "score": score,
+        "total_score": score,
+        "play_time_seconds": float(getattr(game, "stage_play_time", 0.0)),
         # kills는 이번 스테이지에서 격침한 일반 적 수입니다.
         "kills": int(getattr(game, "stage_total_kills", 0) + game.kill_count),
         # shots_fired는 플레이어 대포 발사 횟수입니다.
@@ -180,6 +183,8 @@ def build_end_result(game, clear):
             "stage_name": get_stage_display_name(game),
             # score는 현재 점수입니다.
             "score": int(getattr(game, "score", 0)),
+            "total_score": int(getattr(game, "score", 0)),
+            "play_time_seconds": float(getattr(game, "stage_play_time", 0.0)),
             # kills는 현재 스테이지에서 격침한 일반 적 수입니다.
             "kills": int(getattr(game, "stage_total_kills", 0) + getattr(game, "kill_count", 0)),
             # shots_fired는 플레이어 대포 발사 횟수입니다.
