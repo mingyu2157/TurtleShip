@@ -16,6 +16,7 @@ import random
 
 import pygame
 
+import account_store
 import assets
 import augments
 import campaign
@@ -56,6 +57,12 @@ def open_stage_select(game):
 
 
 def open_score_name_input(game):
+    user = account_store.current_user(game)
+    if user:
+        game.score_nickname = user["nickname"]
+        open_score_leaderboard(game)
+        return
+
     game.game_mode = "score"
     game.game_state = "score_name_input"
     game.paused = False
@@ -531,7 +538,7 @@ def end_game(game, clear):
     # 현재까지의 전투 기록을 end_result 딕셔너리로 묶어 둡니다.
     results.build_end_result(game, clear)
     if getattr(game, "game_mode", "campaign") == "score":
-        entries, rank = scoreboard.submit_score(getattr(game, "score_nickname", ""), getattr(game, "score", 0))
+        entries, rank = scoreboard.submit_score(getattr(game, "score_nickname", ""), getattr(game, "score", 0), game)
         game.leaderboard_entries = entries
         game.leaderboard_last_rank = rank
         game.stage_result = dict(getattr(game, "end_result", {}))
@@ -758,6 +765,8 @@ def shoot_enemy_projectile(game, enemy, stage):
     start_x = enemy["rect"].centerx
     start_y = enemy["rect"].centery
     speed = stage.get("enemy_projectile_speed", 160)
+    stage_number = game.stage_index + 1
+    uses_stage_one_arrow = game.stage_index == 0
 
     projectiles.make_enemy_projectile(
         game,
@@ -769,6 +778,11 @@ def shoot_enemy_projectile(game, enemy, stage):
         stage.get("enemy_projectile_damage", 5),
         0,
         stage["projectile_color"],
+        image_key="projectile_stage1" if uses_stage_one_arrow else f"enemy_projectile_stage{stage_number}",
+        image_padding=34 if uses_stage_one_arrow else 16,
+        outline_color=stage["projectile_color"],
+        rotate_to_velocity=uses_stage_one_arrow,
+        image_tip_angle=135.0 if uses_stage_one_arrow else 90.0,
     )
 
 # 점수 경쟁 레벨이 높아질수록 적 체력을 조금 올리기 위한 보정값입니다.
@@ -905,7 +919,7 @@ def spawn_boss(game):
     width = 300 if game.stage_index == STAGE_MAX - 1 else 230 + game.stage_index * 18
     height = 126 if game.stage_index == STAGE_MAX - 1 else 96 + game.stage_index * 8
     rect = pygame.Rect(0, 0, width, height)
-    rect.center = (play_area.centerx, play_area.top - height)
+    rect.midtop = (play_area.centerx, layout.get_boss_reserved_top(game))
     boss_hp, boss_shield = get_balanced_boss_stats(game, stage)
 
     # 보스는 하나만 존재하므로 game.boss 딕셔너리에 저장합니다.
@@ -939,7 +953,7 @@ def update_boss(game, dt):
 
     stage = game.current_stage()
     rect = game.boss["rect"]
-    play_area = layout.get_play_area(game)
+    play_area = layout.get_combat_area(game)
     if weather.is_stunned(game.boss):
         # 번개에 맞은 보스는 이동과 공격 타이머 갱신을 잠깐 멈춥니다.
         return
@@ -948,8 +962,8 @@ def update_boss(game, dt):
     game.boss["age"] += dt * speed_multiplier
     game.boss["contactTimer"] = max(0, game.boss.get("contactTimer", 0) - dt)
 
-    # 보스는 처음 화면 밖에서 생성되므로 target_y까지 부드럽게 내려오게 합니다.
-    target_y = max(play_area.top + 92, layout.get_hud_height(game) + 36)
+    # HP바 바로 아래를 보스의 상단 한계로 삼아 UI와 몸체가 겹치지 않게 합니다.
+    target_y = layout.get_boss_reserved_top(game)
     rect.y += int((target_y - rect.y) * min(1, dt * 2.8 * speed_multiplier))
 
     center_x = play_area.centerx

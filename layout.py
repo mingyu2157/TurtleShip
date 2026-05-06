@@ -120,24 +120,32 @@ def get_combat_area(game):
     return pygame.Rect(play_area.left, top, play_area.width, height)
 
 
+# 보스 HP바는 전투 영역 안의 최상단에 고정하고, 보스 이동 제한도 같은 기준을 사용합니다.
+def get_boss_hp_bar_rect(game):
+    combat_area = get_combat_area(game)
+    margin_x = max(10, int(combat_area.width * 0.035))
+    width = max(260, combat_area.width - margin_x * 2)
+    height = max(42, min(76, int(combat_area.height * 0.085)))
+    rect = pygame.Rect(0, 0, width, height)
+    rect.midtop = (combat_area.centerx, combat_area.top + max(6, int(combat_area.height * 0.012)))
+    return rect
+
+
+# 보스가 HP바와 겹치지 않도록 보스의 최상단 y좌표를 돌려줍니다.
+def get_boss_reserved_top(game):
+    hp_rect = get_boss_hp_bar_rect(game)
+    return hp_rect.bottom + max(14, int(hp_rect.height * 0.24))
+
+
 # 메인 메뉴 이미지 위의 "게임 시작" 버튼 위치를 계산합니다.
 # 이미지가 없을 때는 화면 크기에 맞춘 기본 버튼 위치를 사용합니다.
 def get_start_button_rect(game):
     menu_image = game.images.get("main_menu")
     if menu_image:
-        # main_menu.png 안에 그려진 기존 "게임 시작" 버튼 위치입니다.
-        source_rect = (898, 584, 386, 92)
-        scale = max(game.pad_width / menu_image.get_width(), game.pad_height / menu_image.get_height())
-        width = int(menu_image.get_width() * scale)
-        height = int(menu_image.get_height() * scale)
-        left = (game.pad_width - width) // 2
-        top = (game.pad_height - height) // 2
-        rect = pygame.Rect(
-            left + int(source_rect[0] * scale),
-            top + int(source_rect[1] * scale),
-            int(source_rect[2] * scale),
-            int(source_rect[3] * scale),
-        )
+        # main_menu.png 안에 그려진 "게임 시작" 버튼의 전체 장식 영역입니다.
+        # draw_cover()와 같은 cover 계산을 써서 배경/클릭/하이라이트가 같은 위치에 놓이게 합니다.
+        source_rect = (878, 578, 415, 102)
+        rect = get_cover_source_rect(game, menu_image, source_rect)
         if rect.colliderect(pygame.Rect(0, 0, game.pad_width, game.pad_height)):
             return rect
 

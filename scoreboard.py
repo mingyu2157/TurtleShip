@@ -4,6 +4,7 @@
 import json
 from datetime import datetime
 
+import account_store
 from settings import BASE_DIR
 
 
@@ -49,6 +50,10 @@ def sort_entries(entries):
 
 # scoreboard.json을 읽되, 파일이 없거나 깨졌으면 빈 점수판으로 시작합니다.
 def load_scores():
+    mysql_entries = account_store.load_scores()
+    if mysql_entries is not None:
+        return mysql_entries
+
     if not SCOREBOARD_PATH.exists():
         return []
 
@@ -98,11 +103,15 @@ def save_scores(entries):
 
 
 # 게임이 끝났을 때 새 점수를 제출하고, 저장된 상위 10명과 이번 순위를 돌려줍니다.
-def submit_score(nickname, score):
+def submit_score(nickname, score, game=None):
     try:
         score_value = int(score)
     except (TypeError, ValueError):
         score_value = 0
+
+    mysql_result = account_store.submit_score(nickname, score_value, game)
+    if mysql_result is not None:
+        return mysql_result
 
     entry = {
         "nickname": clean_nickname(nickname),

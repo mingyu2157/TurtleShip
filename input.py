@@ -10,11 +10,13 @@
 # 공부 순서:
 #   handle_event()가 모든 이벤트의 입구이고,
 #   실제 처리는 handle_key_down(), handle_key_up(), handle_mouse_down()으로 나뉩니다.
+import subprocess
 import sys
 
 import pygame
 
 import actors
+import account_store
 import augments
 import assets
 import campaign
@@ -61,12 +63,39 @@ def handle_event(game, event):
         handle_mouse_motion(game, event.pos)
         return
 
-    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-        handle_mouse_down(game, event.pos)
+    if event.type == pygame.MOUSEWHEEL:
+        handle_mouse_wheel(game, event.y)
+        return
+
+    if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+        handle_mouse_up(game, event.pos)
+        return
+
+    if event.type == pygame.MOUSEBUTTONDOWN:
+        if event.button == 1:
+            handle_mouse_down(game, event.pos)
+        elif event.button in (4, 5):
+            handle_mouse_wheel(game, 1 if event.button == 4 else -1)
 
 
 # 마우스가 움직일 때 메뉴/선택 화면의 포커스 인덱스를 갱신합니다.
 def handle_mouse_motion(game, pos):
+    if game.game_state == "account_profile_crop":
+        handle_account_crop_mouse_motion(game, pos)
+        return
+
+    if ui.should_draw_profile_button(game) and ui.get_profile_button_rect(game).collidepoint(pos):
+        set_menu_cursor(True)
+        return
+
+    if game.game_state in ("account_login", "account_signup", "account_mypage", "account_edit"):
+        layout_info = ui.get_account_layout(game, game.game_state)
+        profile_rect = layout_info.get("profile")
+        over_profile = profile_rect is not None and get_account_profile_click_rect(profile_rect).collidepoint(pos)
+        over_clickable = over_profile or any(rect.collidepoint(pos) for rect in layout_info.get("buttons", {}).values())
+        set_menu_cursor(over_clickable)
+        return
+
     if game.game_state == "menu":
         set_menu_cursor(layout.get_start_button_rect(game).collidepoint(pos))
         return
@@ -156,7 +185,7 @@ def activate_stage_selection(game, stage_index):
 
 def open_mode_select(game):
     game.game_state = "mode_select"
-    game.mode_select_index = max(0, min(getattr(game, "mode_select_index", 0), 1))
+    game.mode_select_index = 0
     game.message_text = ""
     game.message_timer = 0
     assets.play_menu_music(game)
@@ -175,6 +204,10 @@ def activate_mode_selection(game, index):
 
 
 def handle_text_input(game, text):
+    if game.game_state in ("account_login", "account_signup", "account_edit"):
+        handle_account_text_input(game, text)
+        return
+
     if game.game_state != "score_name_input":
         return
 
@@ -189,6 +222,425 @@ def handle_text_input(game, text):
             break
         current += char
     game.score_name_input = current
+
+
+def account_field_names(game):
+    if game.game_state == "account_login":
+        return ("login_id", "password")
+    if game.game_state in ("account_signup", "account_edit"):
+        return ("nickname", "login_id", "password")
+    return ()
+
+
+def remember_account_previous_state(game):
+    if game.game_state not in ("account_login", "account_signup", "account_mypage", "account_edit"):
+        game.account_previous_state = game.game_state
+
+
+def open_account_login(game):
+    remember_account_previous_state(game)
+    user = account_store.current_user(game)
+    game.account_form = {
+        "login_id": user["login_id"] if user else "",
+        "password": "",
+        "nickname": user["nickname"] if user else "",
+    }
+    game.account_focus_index = 0
+    game.account_message_text = ""
+    game.account_message_ok = False
+    game.game_state = "account_login"
+    assets.play_menu_music(game)
+
+
+def open_account_signup(game):
+    clear_account_profile_crop(game)
+    game.account_form = {"login_id": "", "password": "", "nickname": ""}
+    game.account_focus_index = 0
+    game.account_message_text = ""
+    game.account_message_ok = False
+    game.account_profile_upload_bytes = None
+    game.account_profile_upload_mime = None
+    game.account_profile_upload_changed = False
+    game.game_state = "account_signup"
+
+
+def open_account_mypage(game):
+    remember_account_previous_state(game)
+    game.account_message_text = ""
+    game.account_message_ok = False
+    game.game_state = "account_mypage"
+    assets.play_menu_music(game)
+
+
+def open_account_edit(game):
+    user = account_store.current_user(game)
+    if not user:
+        open_account_login(game)
+        return
+    clear_account_profile_crop(game)
+    game.account_form = {
+        "login_id": user["login_id"],
+        "password": "",
+        "nickname": user["nickname"],
+    }
+    game.account_focus_index = 0
+    game.account_message_text = ""
+    game.account_message_ok = False
+    game.account_profile_upload_bytes = None
+    game.account_profile_upload_mime = None
+    game.account_profile_upload_changed = False
+    game.game_state = "account_edit"
+
+
+def close_account_screen(game):
+    destination = getattr(game, "account_previous_state", "menu")
+    if destination in ("account_login", "account_signup", "account_mypage", "account_edit", "play"):
+        destination = "menu"
+    game.game_state = destination
+    if destination == "stage_select":
+        campaign.apply_progress_to_game(game)
+        assets.play_stage_select_music(game)
+        return
+    if destination == "story":
+        assets.play_story_music(game)
+        return
+    if destination == "mode_select":
+        game.mode_select_index = 0
+    if destination in ("menu", "mode_select", "score_name_input", "score_leaderboard"):
+        assets.play_menu_music(game)
+
+
+def handle_account_text_input(game, text):
+    fields = account_field_names(game)
+    if not fields:
+        return
+    field = fields[max(0, min(getattr(game, "account_focus_index", 0), len(fields) - 1))]
+    value = getattr(game, "account_form", {}).get(field, "")
+    max_length = account_store.MAX_NICKNAME_LENGTH if field == "nickname" else account_store.MAX_LOGIN_ID_LENGTH
+    if field == "password":
+        max_length = 32
+    for char in text:
+        if char in "\r\n\t":
+            continue
+        if len(value) >= max_length:
+            break
+        value += char
+    game.account_form[field] = value
+
+
+def move_account_focus(game, direction):
+    fields = account_field_names(game)
+    if not fields:
+        return
+    game.account_focus_index = (getattr(game, "account_focus_index", 0) + direction) % len(fields)
+
+
+def submit_account_login(game):
+    form = getattr(game, "account_form", {})
+    profile, message = account_store.login_user(form.get("login_id", ""), form.get("password", ""))
+    if profile:
+        account_store.apply_profile_to_game(game, profile)
+        game.account_message_text = "로그인 완료"
+        game.account_message_ok = True
+        close_account_screen(game)
+        return
+    game.account_message_text = message
+    game.account_message_ok = False
+
+
+def submit_account_signup(game):
+    form = getattr(game, "account_form", {})
+    profile, message = account_store.signup_user(
+        form.get("login_id", ""),
+        form.get("password", ""),
+        form.get("nickname", ""),
+        getattr(game, "account_profile_upload_bytes", None),
+        getattr(game, "account_profile_upload_mime", None),
+    )
+    if profile:
+        account_store.apply_profile_to_game(game, profile)
+        game.account_message_text = "회원가입 완료"
+        game.account_message_ok = True
+        close_account_screen(game)
+        return
+    game.account_message_text = message
+    game.account_message_ok = False
+
+
+def submit_account_edit(game):
+    user = account_store.current_user(game)
+    if not user:
+        open_account_login(game)
+        return
+    form = getattr(game, "account_form", {})
+    profile, message = account_store.update_user_profile(
+        user["id"],
+        form.get("login_id", ""),
+        form.get("password", ""),
+        form.get("nickname", ""),
+        getattr(game, "account_profile_upload_bytes", None),
+        getattr(game, "account_profile_upload_mime", None),
+        getattr(game, "account_profile_upload_changed", False),
+    )
+    if profile:
+        account_store.apply_profile_to_game(game, profile)
+        game.account_message_text = "저장 완료"
+        game.account_message_ok = True
+        game.game_state = "account_mypage"
+        return
+    game.account_message_text = message
+    game.account_message_ok = False
+
+
+def select_account_profile_image(game):
+    path = pick_profile_image_file()
+    if not path:
+        return
+
+    raw, source_size, message = account_store.load_profile_image_preview(path)
+    if not raw or not source_size:
+        game.account_message_text = message or "프로필 사진을 선택하지 못했습니다."
+        game.account_message_ok = False
+        return
+
+    try:
+        surface = pygame.image.frombuffer(raw, source_size, "RGBA").convert_alpha()
+    except pygame.error as error:
+        game.account_message_text = f"이미지를 불러오지 못했습니다: {error}"
+        game.account_message_ok = False
+        return
+
+    start_account_profile_crop(game, path, surface, source_size)
+
+
+def start_account_profile_crop(game, path, surface, source_size):
+    width, height = source_size
+    side = min(width, height)
+    game.account_crop_previous_state = game.game_state
+    game.account_crop_path = path
+    game.account_crop_surface = surface
+    game.account_crop_source_size = source_size
+    game.account_crop_box = [(width - side) / 2, (height - side) / 2, float(side)]
+    game.account_crop_dragging = False
+    game.account_crop_drag_last = None
+    game.account_message_text = ""
+    game.account_message_ok = False
+    game.game_state = "account_profile_crop"
+
+
+def clear_account_profile_crop(game):
+    game.account_crop_path = ""
+    game.account_crop_surface = None
+    game.account_crop_source_size = (0, 0)
+    game.account_crop_box = None
+    game.account_crop_dragging = False
+    game.account_crop_drag_last = None
+
+
+def finish_account_profile_crop(game):
+    image_data, image_mime, message = account_store.prepare_profile_image(
+        getattr(game, "account_crop_path", ""),
+        getattr(game, "account_crop_box", None),
+    )
+    previous_state = getattr(game, "account_crop_previous_state", "account_signup")
+    clear_account_profile_crop(game)
+    game.game_state = previous_state
+
+    if not image_data:
+        game.account_message_text = message or "프로필 사진을 선택하지 못했습니다."
+        game.account_message_ok = False
+        return
+
+    game.account_profile_upload_bytes = image_data
+    game.account_profile_upload_mime = image_mime
+    game.account_profile_upload_changed = True
+    game.account_message_text = "프로필 사진 선택 완료"
+    game.account_message_ok = True
+
+
+def cancel_account_profile_crop(game):
+    previous_state = getattr(game, "account_crop_previous_state", "account_signup")
+    clear_account_profile_crop(game)
+    game.game_state = previous_state
+    game.account_message_text = "프로필 사진 선택 취소"
+    game.account_message_ok = False
+
+
+def clamp_account_crop_box(game):
+    box = getattr(game, "account_crop_box", None)
+    surface = getattr(game, "account_crop_surface", None)
+    if not box or surface is None:
+        return
+
+    width, height = surface.get_size()
+    max_side = min(width, height)
+    min_side = max(48, int(max_side * 0.12))
+    side = max(min_side, min(float(box[2]), max_side))
+    left = max(0, min(float(box[0]), width - side))
+    top = max(0, min(float(box[1]), height - side))
+    game.account_crop_box = [left, top, side]
+
+
+def move_account_crop_box(game, dx, dy):
+    box = getattr(game, "account_crop_box", None)
+    if not box:
+        return
+    box[0] += dx
+    box[1] += dy
+    clamp_account_crop_box(game)
+
+
+def zoom_account_crop_box(game, direction):
+    box = getattr(game, "account_crop_box", None)
+    surface = getattr(game, "account_crop_surface", None)
+    if not box or surface is None or direction == 0:
+        return
+
+    width, height = surface.get_size()
+    max_side = min(width, height)
+    min_side = max(48, int(max_side * 0.12))
+    factor = 0.88 if direction > 0 else 1.12
+    old_side = float(box[2])
+    new_side = max(min_side, min(max_side, old_side * factor))
+    center_x = float(box[0]) + old_side / 2
+    center_y = float(box[1]) + old_side / 2
+    game.account_crop_box = [center_x - new_side / 2, center_y - new_side / 2, new_side]
+    clamp_account_crop_box(game)
+
+
+def get_account_crop_preview_scale(game):
+    layout_info = ui.get_account_profile_crop_layout(game)
+    image_rect = ui.get_account_crop_image_rect(game, layout_info["preview"])
+    surface = getattr(game, "account_crop_surface", None)
+    if surface is None:
+        return 1
+    return image_rect.width / max(1, surface.get_width())
+
+
+def handle_account_crop_mouse_motion(game, pos):
+    layout_info = ui.get_account_profile_crop_layout(game)
+    over_clickable = layout_info["confirm"].collidepoint(pos) or layout_info["cancel"].collidepoint(pos)
+    crop_rect = ui.get_account_crop_screen_rect(game, layout_info["preview"])
+    over_crop = crop_rect.collidepoint(pos) or layout_info["preview"].collidepoint(pos)
+    set_menu_cursor(over_clickable or over_crop)
+
+    if not getattr(game, "account_crop_dragging", False):
+        return
+
+    last = getattr(game, "account_crop_drag_last", None)
+    game.account_crop_drag_last = pos
+    if not last:
+        return
+
+    scale = get_account_crop_preview_scale(game)
+    if scale <= 0:
+        return
+    move_account_crop_box(game, (pos[0] - last[0]) / scale, (pos[1] - last[1]) / scale)
+
+
+def handle_account_crop_mouse_down(game, pos):
+    layout_info = ui.get_account_profile_crop_layout(game)
+    if layout_info["confirm"].collidepoint(pos):
+        assets.play_stage_sound(game, "shoot", 0.45)
+        finish_account_profile_crop(game)
+        return
+    if layout_info["cancel"].collidepoint(pos):
+        assets.play_stage_sound(game, "shoot", 0.45)
+        cancel_account_profile_crop(game)
+        return
+    if layout_info["preview"].collidepoint(pos):
+        game.account_crop_dragging = True
+        game.account_crop_drag_last = pos
+
+
+def handle_account_crop_mouse_up(game, pos):
+    game.account_crop_dragging = False
+    game.account_crop_drag_last = None
+
+
+def handle_account_crop_key_down(game, event):
+    if event.key == pygame.K_ESCAPE:
+        cancel_account_profile_crop(game)
+        return
+    if event.key == pygame.K_RETURN:
+        assets.play_stage_sound(game, "shoot", 0.45)
+        finish_account_profile_crop(game)
+        return
+    plus_keys = (pygame.K_EQUALS, getattr(pygame, "K_PLUS", pygame.K_EQUALS), getattr(pygame, "K_KP_PLUS", pygame.K_EQUALS))
+    minus_keys = (pygame.K_MINUS, getattr(pygame, "K_UNDERSCORE", pygame.K_MINUS), getattr(pygame, "K_KP_MINUS", pygame.K_MINUS))
+    if event.key in plus_keys:
+        zoom_account_crop_box(game, 1)
+        return
+    if event.key in minus_keys:
+        zoom_account_crop_box(game, -1)
+        return
+
+    step = max(2, int(getattr(game, "account_crop_box", [0, 0, 100])[2] * 0.025))
+    if event.key in (pygame.K_LEFT, pygame.K_a):
+        move_account_crop_box(game, -step, 0)
+    elif event.key in (pygame.K_RIGHT, pygame.K_d):
+        move_account_crop_box(game, step, 0)
+    elif event.key in (pygame.K_UP, pygame.K_w):
+        move_account_crop_box(game, 0, -step)
+    elif event.key in (pygame.K_DOWN, pygame.K_s):
+        move_account_crop_box(game, 0, step)
+
+
+def pick_profile_image_file():
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception:
+        return ""
+
+    root = None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        return filedialog.askopenfilename(
+            title="프로필 사진 선택",
+            filetypes=(
+                ("Image files", "*.png *.jpg *.jpeg *.webp *.bmp"),
+                ("All files", "*.*"),
+            ),
+        )
+    except Exception:
+        return ""
+    finally:
+        if root is not None:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+
+def handle_account_key_down(game, event):
+    if event.key == pygame.K_ESCAPE:
+        close_account_screen(game)
+        return
+    if event.key in (pygame.K_TAB, pygame.K_DOWN):
+        move_account_focus(game, 1)
+        return
+    if event.key == pygame.K_UP:
+        move_account_focus(game, -1)
+        return
+    if event.key == pygame.K_BACKSPACE:
+        fields = account_field_names(game)
+        if fields:
+            field = fields[max(0, min(getattr(game, "account_focus_index", 0), len(fields) - 1))]
+            game.account_form[field] = getattr(game, "account_form", {}).get(field, "")[:-1]
+        return
+    if event.key == pygame.K_RETURN:
+        if game.game_state == "account_login":
+            submit_account_login(game)
+        elif game.game_state == "account_signup":
+            submit_account_signup(game)
+        elif game.game_state == "account_edit":
+            submit_account_edit(game)
+        elif game.game_state == "account_mypage":
+            close_account_screen(game)
+        return
 
 
 # 일시정지 메뉴에서 선택한 항목을 실행합니다.
@@ -212,6 +664,14 @@ def handle_key_down(game, event):
         # scancode는 키보드의 물리 위치에 가까워서 한글 입력 상태에서도 WASD를 추적할 수 있습니다.
         game.held_scancodes.add(event.scancode)
 
+    if game.game_state == "account_profile_crop":
+        handle_account_crop_key_down(game, event)
+        return
+
+    if game.game_state in ("account_login", "account_signup", "account_mypage", "account_edit"):
+        handle_account_key_down(game, event)
+        return
+
     if game.game_state == "menu":
         if event.key in (pygame.K_RETURN, pygame.K_SPACE):
             assets.play_stage_sound(game, "shoot", 0.45)
@@ -223,11 +683,18 @@ def handle_key_down(game, event):
         return
 
     if game.game_state == "mode_select":
-        if event.key in (pygame.K_UP, pygame.K_LEFT, pygame.K_w, pygame.K_a):
-            game.mode_select_index = (getattr(game, "mode_select_index", 0) - 1) % 3
+        current_mode_index = getattr(game, "mode_select_index", 0)
+        if event.key in (pygame.K_LEFT, pygame.K_a):
+            game.mode_select_index = 0 if current_mode_index == 1 else 1
             return
-        if event.key in (pygame.K_DOWN, pygame.K_RIGHT, pygame.K_s, pygame.K_d):
-            game.mode_select_index = (getattr(game, "mode_select_index", 0) + 1) % 3
+        if event.key in (pygame.K_RIGHT, pygame.K_d):
+            game.mode_select_index = 1 if current_mode_index == 0 else 0
+            return
+        if event.key in (pygame.K_UP, pygame.K_w):
+            game.mode_select_index = 0 if current_mode_index == 2 else 2
+            return
+        if event.key in (pygame.K_DOWN, pygame.K_s):
+            game.mode_select_index = 2
             return
         if event.key == pygame.K_1:
             activate_mode_selection(game, 0)
@@ -246,8 +713,7 @@ def handle_key_down(game, event):
 
     if game.game_state == "score_name_input":
         if event.key == pygame.K_ESCAPE:
-            game.game_state = "mode_select"
-            assets.play_menu_music(game)
+            open_mode_select(game)
             return
         if event.key == pygame.K_BACKSPACE:
             game.score_name_input = getattr(game, "score_name_input", "")[:-1]
@@ -264,8 +730,7 @@ def handle_key_down(game, event):
             actors.start_score_mode(game)
             return
         if event.key == pygame.K_ESCAPE:
-            game.game_state = "mode_select"
-            assets.play_menu_music(game)
+            open_mode_select(game)
             return
         return
 
@@ -446,6 +911,22 @@ def handle_key_up(game, event):
 # 마우스 왼쪽 버튼을 눌렀을 때 실행됩니다.
 # 메뉴에서는 시작 버튼 클릭, 플레이 중에는 발사로 사용합니다.
 def handle_mouse_down(game, pos):
+    if game.game_state == "account_profile_crop":
+        handle_account_crop_mouse_down(game, pos)
+        return
+
+    if ui.should_draw_profile_button(game) and ui.get_profile_button_rect(game).collidepoint(pos):
+        assets.play_stage_sound(game, "shoot", 0.45)
+        if account_store.current_user(game):
+            open_account_mypage(game)
+        else:
+            open_account_login(game)
+        return
+
+    if game.game_state in ("account_login", "account_signup", "account_mypage", "account_edit"):
+        handle_account_mouse_down(game, pos)
+        return
+
     if game.game_state == "menu":
         if layout.get_start_button_rect(game).collidepoint(pos):
             assets.play_stage_sound(game, "shoot", 0.45)
@@ -545,3 +1026,70 @@ def handle_mouse_down(game, pos):
             return
 
         combat.shoot_player_bullet(game)
+
+
+def handle_mouse_up(game, pos):
+    if game.game_state == "account_profile_crop":
+        handle_account_crop_mouse_up(game, pos)
+
+
+def handle_mouse_wheel(game, direction):
+    if game.game_state == "account_profile_crop":
+        zoom_account_crop_box(game, direction)
+
+
+def handle_account_mouse_down(game, pos):
+    layout_info = ui.get_account_layout(game, game.game_state)
+    profile_rect = layout_info.get("profile")
+    if profile_rect and profile_rect.collidepoint(pos):
+        assets.play_stage_sound(game, "shoot", 0.45)
+        if game.game_state == "account_mypage":
+            open_account_edit(game)
+        select_account_profile_image(game)
+        return
+
+    fields = layout_info.get("fields", [])
+    for index, (_, rect) in enumerate(fields):
+        if rect.collidepoint(pos):
+            game.account_focus_index = index
+            return
+
+    buttons = layout_info.get("buttons", {})
+    if game.game_state == "account_login":
+        if buttons.get("login") and buttons["login"].collidepoint(pos):
+            assets.play_stage_sound(game, "shoot", 0.45)
+            submit_account_login(game)
+            return
+        if buttons.get("signup") and buttons["signup"].collidepoint(pos):
+            assets.play_stage_sound(game, "shoot", 0.45)
+            open_account_signup(game)
+            return
+        if buttons.get("back") and buttons["back"].collidepoint(pos):
+            close_account_screen(game)
+            return
+
+    if game.game_state == "account_signup":
+        if buttons.get("submit") and buttons["submit"].collidepoint(pos):
+            assets.play_stage_sound(game, "shoot", 0.45)
+            submit_account_signup(game)
+            return
+        if buttons.get("back") and buttons["back"].collidepoint(pos):
+            open_account_login(game)
+            return
+
+    if game.game_state == "account_mypage":
+        if buttons.get("edit") and buttons["edit"].collidepoint(pos):
+            assets.play_stage_sound(game, "shoot", 0.45)
+            open_account_edit(game)
+            return
+        if buttons.get("back") and buttons["back"].collidepoint(pos):
+            close_account_screen(game)
+            return
+
+    if game.game_state == "account_edit":
+        if buttons.get("save") and buttons["save"].collidepoint(pos):
+            assets.play_stage_sound(game, "shoot", 0.45)
+            submit_account_edit(game)
+            return
+        if buttons.get("back") and buttons["back"].collidepoint(pos):
+            game.game_state = "account_mypage" if account_store.current_user(game) else "account_login"

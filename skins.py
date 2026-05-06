@@ -120,11 +120,24 @@ COMMON_IMAGE_NAMES = [
     "story_summary_vertical",
     # 전투 중 오른쪽 정보 UI와 Q/Z/X 스킬 아이콘입니다.
     "right_ui_panel",
+    "hp_gauge",
+    "boss_hp_fill",
+    "boss_hp_stage1_phase1",
+    "boss_hp_stage1_phase2",
+    "boss_hp_stage2",
+    "boss_hp_stage3",
+    "boss_hp_stage4",
+    "boss_hp_stage5",
     "skill_icon_q",
     "skill_icon_z",
     "skill_icon_x",
     "leaderboard_background",
     "leaderboard_background_vertical",
+    "account_profile_icon",
+    "account_login_panel",
+    "account_signup_panel",
+    "account_mypage_panel",
+    "account_edit_panel",
     # story_intro.png:
     #   도입 스토리 전용 이미지 슬롯입니다.
     #   지금 캠페인 흐름에서는 주로 스테이지별 스토리를 보지만, 도입부를 다시 쓸 때 바로 연결됩니다.
@@ -212,6 +225,8 @@ def stage_image_names(stage_max):
             f"boss_stage{stage_number}",
             f"bullet_stage{stage_number}",
             f"projectile_stage{stage_number}",
+            f"enemy_projectile_stage{stage_number}",
+            f"boss_projectile_stage{stage_number}",
         ]
         # story_stage1_page1.png ~ story_stage1_page9.png:
         #   한 스테이지 안에서 여러 편의 난중일기 이미지를 순서대로 넣을 수 있는 칸입니다.

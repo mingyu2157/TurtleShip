@@ -10,12 +10,14 @@
 # 공부 순서:
 #   draw_text()는 모든 글자 출력의 기본 함수입니다.
 #   draw_menu(), draw_story(), draw_hud()처럼 화면 종류별 함수가 이 draw_text()를 재사용합니다.
+from io import BytesIO
 from pathlib import Path
 import math
 from time import sleep
 
 import pygame
 
+import account_store
 import augments
 import assets
 import campaign
@@ -43,18 +45,19 @@ DIARY_ACCENT = (89, 36, 18)
 # 일기지 이미지가 어두운 경우 글자 뒤에 깔아줄 밝은 종이색입니다.
 DIARY_TEXT_BACK = (255, 246, 220, 158)
 
-RIGHT_UI_SOURCE_SIZE = (1024, 1536)
+RIGHT_UI_SOURCE_SIZE = (887, 1774)
 RIGHT_UI_SECTIONS = {
-    "stage": (166, 150, 692, 96),
-    "score": (166, 246, 692, 116),
-    "hp": (226, 414, 640, 70),
-    "augments": (160, 902, 704, 178),
-    "stats": (160, 1136, 704, 260),
+    "header": (165, 104, 555, 58),
+    "stage": (125, 200, 636, 144),
+    "score": (125, 398, 636, 146),
+    "hp": (218, 612, 498, 48),
+    "augments": (124, 1030, 638, 208),
+    "stats": (124, 1306, 638, 316),
 }
 RIGHT_UI_SKILL_SLOTS = (
-    (150, 544, 226, 226),
-    (399, 544, 226, 226),
-    (648, 544, 226, 226),
+    (132, 712, 178, 178),
+    (354, 712, 178, 178),
+    (576, 712, 178, 178),
 )
 STAGE_RESULT_VALUE_RECTS = {
     "score": (872, 324, 330, 64),
@@ -64,6 +67,53 @@ STAGE_RESULT_VALUE_RECTS = {
     "total_score": (720, 635, 510, 84),
 }
 SCORE_LEADERBOARD_START_BUTTON_SOURCE_RECT = (570, 900, 396, 86)
+ACCOUNT_SOURCE_SIZE = (1448, 1086)
+ACCOUNT_HIDDEN_STATES = {"story", "play", "account_login", "account_signup", "account_mypage", "account_edit", "account_profile_crop"}
+ACCOUNT_PANEL_IMAGES = {
+    "account_login": "account_login_panel",
+    "account_signup": "account_signup_panel",
+    "account_mypage": "account_mypage_panel",
+    "account_edit": "account_edit_panel",
+}
+ACCOUNT_SOURCE_RECTS = {
+    "account_login": {
+        "fields": (("login_id", (260, 356, 940, 92)), ("password", (260, 494, 940, 92))),
+        "buttons": {
+            "login": (250, 624, 950, 132),
+            "signup": (300, 808, 420, 88),
+            "back": (760, 808, 420, 88),
+        },
+    },
+    "account_signup": {
+        "fields": (("nickname", (744, 342, 560, 88)), ("login_id", (744, 476, 560, 88)), ("password", (744, 612, 560, 88))),
+        "profile": (170, 300, 350, 360),
+        "buttons": {
+            "submit": (260, 820, 420, 90),
+            "back": (770, 820, 420, 90),
+        },
+    },
+    "account_mypage": {
+        "profile": (170, 310, 350, 360),
+        "values": {
+            "nickname": (744, 344, 560, 82),
+            "login_id": (744, 476, 560, 82),
+            "best_score": (744, 606, 560, 82),
+            "stage": (744, 738, 560, 82),
+        },
+        "buttons": {
+            "edit": (268, 828, 418, 88),
+            "back": (778, 828, 418, 88),
+        },
+    },
+    "account_edit": {
+        "fields": (("nickname", (744, 344, 560, 88)), ("login_id", (744, 476, 560, 88)), ("password", (744, 612, 560, 88))),
+        "profile": (170, 300, 350, 360),
+        "buttons": {
+            "save": (268, 828, 418, 88),
+            "back": (778, 828, 418, 88),
+        },
+    },
+}
 
 
 # 사용할 폰트를 가져옵니다.
@@ -151,6 +201,34 @@ def get_story_font(game, size, bold=False):
     else:
         font = get_font(game, size, bold)
 
+    game.fonts[key] = font
+    return font
+
+
+def get_right_ui_font(game, size, bold=False):
+    key = ("right_ui", size, bold)
+    if key in game.fonts:
+        return game.fonts[key]
+
+    root = Path(__file__).resolve().parent
+    fonts_dir = root / "assets" / "fonts"
+    candidates = [
+        fonts_dir / ("museum_classic_b.ttf" if bold else "museum_classic_m.ttf"),
+        fonts_dir / "museum_classic_m.ttf",
+        fonts_dir / "museum_classic_l.ttf",
+    ]
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            font = pygame.font.Font(str(candidate), size)
+            game.fonts[key] = font
+            return font
+        except pygame.error:
+            continue
+
+    font = get_story_font(game, size, bold)
     game.fonts[key] = font
     return font
 
@@ -355,14 +433,37 @@ def get_image_cover_rect_in_rect(image, rect):
     return image_rect
 
 
+def get_image_contain_rect_in_rect(image, rect):
+    if image is None or rect.width <= 0 or rect.height <= 0:
+        return pygame.Rect(rect)
+
+    scale = min(rect.width / image.get_width(), rect.height / image.get_height())
+    scaled_width = max(1, int(image.get_width() * scale))
+    scaled_height = max(1, int(image.get_height() * scale))
+    image_rect = pygame.Rect(0, 0, scaled_width, scaled_height)
+    image_rect.center = rect.center
+    return image_rect
+
+
 def draw_image_content_contain_in_rect(game, image, rect):
     if image is None or rect.width <= 0 or rect.height <= 0:
         return
 
-    source_rect = image.get_bounding_rect()
-    if source_rect.width <= 0 or source_rect.height <= 0:
+    cropped = get_image_content_surface(game, image)
+    if cropped is None:
         draw_image_contain_in_rect(game, image, rect)
         return
+
+    draw_image_contain_in_rect(game, cropped, rect)
+
+
+def get_image_content_surface(game, image):
+    if image is None:
+        return None
+
+    source_rect = image.get_bounding_rect()
+    if source_rect.width <= 0 or source_rect.height <= 0:
+        return None
 
     crop_cache = getattr(game, "image_content_cache", None)
     if crop_cache is None:
@@ -374,8 +475,7 @@ def draw_image_content_contain_in_rect(game, image, rect):
     if cropped is None:
         cropped = image.subsurface(source_rect).copy()
         crop_cache[cache_key] = cropped
-
-    draw_image_contain_in_rect(game, cropped, rect)
+    return cropped
 
 
 # 스토리 페이지가 바뀌었는지 확인하기 위한 키를 만듭니다.
@@ -520,10 +620,33 @@ def draw_menu_baked_button_highlight(game, rect, selected, hovered):
     if not selected and not hovered:
         return
 
-    overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
-    overlay.fill((255, 224, 145, 30 if hovered else 18))
-    game.screen.blit(overlay, rect)
-    pygame.draw.rect(game.screen, (255, 225, 137), rect, 4 if hovered else 3, border_radius=8)
+    button_image = get_image_content_surface(game, game.images.get("menu_start_button"))
+    if button_image:
+        draw_menu_button_shape_glow(game, button_image, rect, hovered)
+        return
+
+    pygame.draw.rect(game.screen, (255, 219, 106), rect, 2, border_radius=10)
+
+
+def draw_menu_button_shape_glow(game, button_image, rect, hovered):
+    glow_rect = rect.inflate(max(12, rect.width // 26), max(8, rect.height // 9))
+    target = pygame.Rect(0, 0, glow_rect.width, glow_rect.height)
+    cover_rect = get_image_cover_rect_in_rect(button_image, target)
+    scaled = assets.get_scaled_image(game, button_image, cover_rect.size)
+    if scaled is None:
+        return
+
+    mask = pygame.mask.from_surface(scaled)
+    outline = mask.outline(3)
+    if len(outline) < 3:
+        return
+
+    glow = pygame.Surface(scaled.get_size(), pygame.SRCALPHA)
+    for width, alpha in ((7, 34 if hovered else 22), (3, 96 if hovered else 70)):
+        pygame.draw.lines(glow, (255, 222, 105, alpha), True, outline, width)
+
+    base = (glow_rect.left + cover_rect.left, glow_rect.top + cover_rect.top)
+    game.screen.blit(glow, base)
 
 
 # 메인 메뉴의 버튼 하나를 그립니다.
@@ -587,6 +710,378 @@ def draw_score_name_input(game, draw_sea_background):
     draw_text(game, "시작", 18, WHITE, panel.centerx + 18, panel.bottom - 46, True, True)
     draw_text(game, "Esc", 16, GRAY, panel.right - 86, panel.bottom - 46, True, True)
     draw_text(game, "메뉴", 16, GRAY, panel.right - 45, panel.bottom - 46, True, True)
+
+
+def should_draw_profile_button(game):
+    return getattr(game, "game_state", "menu") not in ACCOUNT_HIDDEN_STATES
+
+
+def get_profile_button_rect(game):
+    size = max(58, min(88, int(min(game.pad_width, game.pad_height) * 0.105)))
+    return pygame.Rect(18, 18, size, size)
+
+
+def draw_profile_button(game):
+    rect = get_profile_button_rect(game)
+    icon = game.images.get(account_store.DEFAULT_PROFILE_IMAGE_KEY)
+    if icon:
+        draw_image_content_contain_in_rect(game, icon, rect)
+    else:
+        pygame.draw.circle(game.screen, (14, 14, 14), rect.center, rect.width // 2)
+        pygame.draw.circle(game.screen, (224, 176, 78), rect.center, rect.width // 2 - 2, 2)
+
+    user = account_store.current_user(game)
+    photo = get_account_profile_surface(game, user)
+    if photo:
+        draw_profile_photo_in_frame(game, photo, rect)
+
+    hovered = rect.collidepoint(pygame.mouse.get_pos())
+    if hovered:
+        glow = pygame.Surface(rect.inflate(12, 12).size, pygame.SRCALPHA)
+        pygame.draw.ellipse(glow, (255, 220, 112, 90), glow.get_rect(), 4)
+        game.screen.blit(glow, rect.inflate(12, 12))
+
+
+def draw_account_background(game, draw_sea_background):
+    background = game.images.get("main_menu") or game.images.get("leaderboard_background")
+    if background:
+        layout.draw_cover(game, background)
+    else:
+        draw_sea_background(game)
+
+    shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
+    shade.fill((0, 0, 0, 142))
+    game.screen.blit(shade, (0, 0))
+
+
+def get_account_panel_rect(game, state):
+    image = game.images.get(ACCOUNT_PANEL_IMAGES.get(state, ""))
+    outer = game.screen.get_rect().inflate(-max(24, game.pad_width // 18), -max(24, game.pad_height // 12))
+    if image:
+        return get_image_contain_rect_in_rect(image, outer)
+    panel = pygame.Rect(0, 0, min(900, int(game.pad_width * 0.78)), min(620, int(game.pad_height * 0.78)))
+    panel.center = game.screen.get_rect().center
+    return panel
+
+
+def get_account_layout(game, state):
+    panel = get_account_panel_rect(game, state)
+    source_size = game.images.get(ACCOUNT_PANEL_IMAGES.get(state, "")).get_size() if game.images.get(ACCOUNT_PANEL_IMAGES.get(state, "")) else ACCOUNT_SOURCE_SIZE
+    source = ACCOUNT_SOURCE_RECTS.get(state, {})
+    fields = [(name, scale_source_rect(panel, source_size, rect)) for name, rect in source.get("fields", ())]
+    buttons = {name: scale_source_rect(panel, source_size, rect) for name, rect in source.get("buttons", {}).items()}
+    values = {name: scale_source_rect(panel, source_size, rect) for name, rect in source.get("values", {}).items()}
+    profile = scale_source_rect(panel, source_size, source["profile"]) if "profile" in source else None
+    return {
+        "panel": panel,
+        "fields": fields,
+        "buttons": buttons,
+        "values": values,
+        "profile": profile,
+    }
+
+
+def draw_account_panel(game, state, draw_sea_background):
+    draw_account_background(game, draw_sea_background)
+    panel = get_account_panel_rect(game, state)
+    image = game.images.get(ACCOUNT_PANEL_IMAGES.get(state, ""))
+    if image:
+        scaled = assets.get_scaled_image(game, image, panel.size)
+        game.screen.blit(scaled, panel)
+    else:
+        surface = pygame.Surface(panel.size, pygame.SRCALPHA)
+        surface.fill((7, 8, 9, 238))
+        game.screen.blit(surface, panel)
+        pygame.draw.rect(game.screen, (220, 164, 70), panel, 2, border_radius=8)
+    return get_account_layout(game, state)
+
+
+def draw_account_form_fields(game, layout_info, include_cursor=True):
+    form = getattr(game, "account_form", {})
+    focus_index = getattr(game, "account_focus_index", 0)
+    cursor = "|" if include_cursor and pygame.time.get_ticks() // 450 % 2 == 0 else ""
+    for index, (name, rect) in enumerate(layout_info.get("fields", [])):
+        text = form.get(name, "")
+        if name == "password":
+            text = "*" * len(text)
+        if index == focus_index:
+            text = f"{text}{cursor}"
+        color = (246, 218, 150) if text else (154, 119, 70)
+        text_rect = rect.inflate(-max(20, rect.width // 20), -max(4, rect.height // 8))
+        if getattr(game, "game_state", "") == "account_login":
+            inset = max(54, rect.width // 11)
+            text_rect.left += inset
+            text_rect.width = max(1, text_rect.width - inset)
+        draw_account_field_value(game, text, max(24, rect.height // 2), color, text_rect)
+
+
+def draw_account_field_value(game, text, size, color, rect):
+    text = str(text)
+    current_size = size
+    while current_size > 12:
+        font = get_right_ui_font(game, current_size, True)
+        if font.size(text)[0] <= rect.width and font.get_height() <= rect.height:
+            break
+        current_size -= 1
+
+    font = get_right_ui_font(game, current_size, True)
+    text = trim_text_to_width(font, text, rect.width)
+    image = font.render(text, True, color)
+    image_rect = image.get_rect()
+    image_rect.midleft = (rect.left, rect.centery)
+    game.screen.blit(image, image_rect)
+
+
+def draw_account_message(game, layout_info):
+    message = getattr(game, "account_message_text", "")
+    if not message:
+        if account_store.get_last_error() and game.game_state in ("account_login", "account_signup"):
+            message = "MySQL 설정이 필요합니다"
+        else:
+            return
+    panel = layout_info["panel"]
+    color = (128, 238, 166) if getattr(game, "account_message_ok", False) else (255, 154, 126)
+    rect = pygame.Rect(panel.left + panel.width // 4, panel.bottom - max(130, panel.height // 8), panel.width // 2, max(26, panel.height // 34))
+    draw_text_fit_in_rect(game, message, max(14, rect.height - 2), color, rect, True, True, get_right_ui_font)
+
+
+def draw_account_profile_image(game, rect):
+    if not rect:
+        return
+    user = account_store.current_user(game)
+    photo = get_account_profile_surface(game, user)
+    if photo:
+        draw_profile_photo_in_frame(game, photo, rect)
+
+
+def get_account_profile_surface(game, user=None):
+    image_bytes = getattr(game, "account_profile_upload_bytes", None)
+    if image_bytes is None and user:
+        image_bytes = user.get("profile_image_data")
+    if not image_bytes:
+        return None
+
+    key = hash(image_bytes)
+    if getattr(game, "_account_profile_surface_key", None) == key:
+        return getattr(game, "_account_profile_surface", None)
+
+    try:
+        surface = pygame.image.load(BytesIO(image_bytes)).convert_alpha()
+    except pygame.error:
+        return None
+
+    game._account_profile_surface_key = key
+    game._account_profile_surface = surface
+    return surface
+
+
+def draw_profile_photo_in_frame(game, photo, frame_rect):
+    photo_rect = get_profile_photo_inner_rect(frame_rect)
+    if photo_rect.width <= 0 or photo_rect.height <= 0:
+        return
+
+    local_rect = pygame.Rect(0, 0, photo_rect.width, photo_rect.height)
+    cover_rect = get_image_cover_rect_in_rect(photo, local_rect)
+    scaled = assets.get_scaled_image(game, photo, cover_rect.size)
+
+    circle = pygame.Surface(photo_rect.size, pygame.SRCALPHA)
+    circle.blit(scaled, cover_rect)
+    mask = pygame.Surface(photo_rect.size, pygame.SRCALPHA)
+    pygame.draw.ellipse(mask, (255, 255, 255, 255), mask.get_rect())
+    circle.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    game.screen.blit(circle, photo_rect)
+
+
+def get_profile_photo_inner_rect(frame_rect):
+    diameter = int(min(frame_rect.width, frame_rect.height) * 0.62)
+    rect = pygame.Rect(0, 0, max(1, diameter), max(1, diameter))
+    rect.center = (frame_rect.centerx, frame_rect.centery - int(frame_rect.height * 0.035))
+    return rect
+
+
+def get_account_profile_crop_layout(game):
+    screen_rect = game.screen.get_rect()
+    panel = screen_rect.inflate(-max(40, game.pad_width // 10), -max(38, game.pad_height // 10))
+    panel.width = min(panel.width, 1180)
+    panel.height = min(panel.height, 760)
+    panel.center = screen_rect.center
+
+    margin = max(22, panel.width // 30)
+    title_rect = pygame.Rect(panel.left + margin, panel.top + 20, panel.width - margin * 2, 54)
+    button_height = max(58, panel.height // 11)
+    bottom_y = panel.bottom - margin - button_height
+    content_top = title_rect.bottom + 18
+    content_bottom = bottom_y - 22
+
+    preview_size = min(panel.height - 150, int(panel.width * 0.56), content_bottom - content_top)
+    preview = pygame.Rect(panel.left + margin, content_top, preview_size, preview_size)
+
+    side_left = preview.right + margin
+    side_width = panel.right - margin - side_left
+    circle_size = min(side_width, max(190, preview_size // 2))
+    circle = pygame.Rect(0, 0, circle_size, circle_size)
+    circle.center = (side_left + side_width // 2, preview.centery - preview_size // 10)
+
+    button_width = min(max(190, panel.width // 5), (panel.width - margin * 3) // 2)
+    confirm = pygame.Rect(0, 0, button_width, button_height)
+    cancel = pygame.Rect(0, 0, button_width, button_height)
+    confirm.midbottom = (panel.centerx - button_width // 2 - margin // 2, panel.bottom - margin)
+    cancel.midbottom = (panel.centerx + button_width // 2 + margin // 2, panel.bottom - margin)
+
+    return {
+        "panel": panel,
+        "title": title_rect,
+        "preview": preview,
+        "circle": circle,
+        "confirm": confirm,
+        "cancel": cancel,
+    }
+
+
+def get_account_crop_image_rect(game, preview_rect):
+    surface = getattr(game, "account_crop_surface", None)
+    if surface is None or surface.get_width() <= 0 or surface.get_height() <= 0:
+        return pygame.Rect(preview_rect)
+
+    scale = min(preview_rect.width / surface.get_width(), preview_rect.height / surface.get_height())
+    width = max(1, int(surface.get_width() * scale))
+    height = max(1, int(surface.get_height() * scale))
+    rect = pygame.Rect(0, 0, width, height)
+    rect.center = preview_rect.center
+    return rect
+
+
+def get_account_crop_screen_rect(game, preview_rect):
+    box = getattr(game, "account_crop_box", None)
+    surface = getattr(game, "account_crop_surface", None)
+    if not box or surface is None:
+        return pygame.Rect(preview_rect)
+
+    image_rect = get_account_crop_image_rect(game, preview_rect)
+    scale = image_rect.width / max(1, surface.get_width())
+    left, top, side = box
+    return pygame.Rect(
+        int(image_rect.left + left * scale),
+        int(image_rect.top + top * scale),
+        max(1, int(side * scale)),
+        max(1, int(side * scale)),
+    )
+
+
+def draw_account_crop_preview(game, preview_rect):
+    surface = getattr(game, "account_crop_surface", None)
+    if surface is None:
+        return
+
+    pygame.draw.rect(game.screen, (8, 8, 8), preview_rect, border_radius=4)
+    image_rect = get_account_crop_image_rect(game, preview_rect)
+    draw_image_contain_in_rect(game, surface, preview_rect)
+    crop_rect = get_account_crop_screen_rect(game, preview_rect)
+
+    shade_color = (0, 0, 0, 150)
+    shade_rects = (
+        pygame.Rect(image_rect.left, image_rect.top, image_rect.width, max(0, crop_rect.top - image_rect.top)),
+        pygame.Rect(image_rect.left, crop_rect.bottom, image_rect.width, max(0, image_rect.bottom - crop_rect.bottom)),
+        pygame.Rect(image_rect.left, crop_rect.top, max(0, crop_rect.left - image_rect.left), crop_rect.height),
+        pygame.Rect(crop_rect.right, crop_rect.top, max(0, image_rect.right - crop_rect.right), crop_rect.height),
+    )
+    for rect in shade_rects:
+        if rect.width > 0 and rect.height > 0:
+            shade = pygame.Surface(rect.size, pygame.SRCALPHA)
+            shade.fill(shade_color)
+            game.screen.blit(shade, rect)
+
+    pygame.draw.rect(game.screen, (255, 218, 112), crop_rect, 3, border_radius=6)
+    pygame.draw.ellipse(game.screen, (255, 235, 164), crop_rect.inflate(-4, -4), 2)
+    pygame.draw.rect(game.screen, (85, 56, 20), preview_rect, 2, border_radius=4)
+
+
+def draw_account_crop_circle_preview(game, circle_rect):
+    surface = getattr(game, "account_crop_surface", None)
+    box = getattr(game, "account_crop_box", None)
+    if surface is None or not box:
+        return
+
+    left, top, side = [int(value) for value in box]
+    source_rect = pygame.Rect(left, top, side, side)
+    source_rect.clamp_ip(surface.get_rect())
+    source_rect.width = min(source_rect.width, surface.get_width() - source_rect.left)
+    source_rect.height = min(source_rect.height, surface.get_height() - source_rect.top)
+    if source_rect.width <= 0 or source_rect.height <= 0:
+        return
+
+    cropped = surface.subsurface(source_rect).copy()
+    scaled = pygame.transform.smoothscale(cropped, circle_rect.size)
+    circle = pygame.Surface(circle_rect.size, pygame.SRCALPHA)
+    circle.blit(scaled, (0, 0))
+    mask = pygame.Surface(circle_rect.size, pygame.SRCALPHA)
+    pygame.draw.ellipse(mask, (255, 255, 255, 255), mask.get_rect())
+    circle.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+    game.screen.blit(circle, circle_rect)
+    pygame.draw.ellipse(game.screen, (255, 220, 112), circle_rect, 3)
+    pygame.draw.ellipse(game.screen, (90, 58, 18), circle_rect.inflate(10, 10), 2)
+
+
+def draw_account_profile_crop(game, draw_sea_background):
+    draw_account_background(game, draw_sea_background)
+    layout_info = get_account_profile_crop_layout(game)
+    panel = layout_info["panel"]
+
+    panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
+    panel_surface.fill((8, 9, 10, 238))
+    game.screen.blit(panel_surface, panel)
+    pygame.draw.rect(game.screen, (229, 176, 72), panel, 3, border_radius=8)
+    pygame.draw.rect(game.screen, (86, 55, 21), panel.inflate(-18, -18), 1, border_radius=6)
+
+    draw_text_fit_in_rect(game, "프로필 사진 편집", 42, (246, 218, 150), layout_info["title"], True, True, get_right_ui_font)
+    draw_account_crop_preview(game, layout_info["preview"])
+    draw_account_crop_circle_preview(game, layout_info["circle"])
+
+    draw_menu_mode_button(game, layout_info["confirm"], "업로드", True, layout_info["confirm"].collidepoint(pygame.mouse.get_pos()))
+    draw_menu_mode_button(game, layout_info["cancel"], "취소", False, layout_info["cancel"].collidepoint(pygame.mouse.get_pos()))
+
+
+def draw_account_login(game, draw_sea_background):
+    layout_info = draw_account_panel(game, "account_login", draw_sea_background)
+    draw_account_form_fields(game, layout_info)
+    draw_account_message(game, layout_info)
+
+
+def draw_account_signup(game, draw_sea_background):
+    layout_info = draw_account_panel(game, "account_signup", draw_sea_background)
+    draw_account_profile_image(game, layout_info.get("profile"))
+    draw_account_form_fields(game, layout_info)
+    draw_account_message(game, layout_info)
+
+
+def draw_account_mypage(game, draw_sea_background):
+    layout_info = draw_account_panel(game, "account_mypage", draw_sea_background)
+    draw_account_profile_image(game, layout_info.get("profile"))
+    user = account_store.current_user(game)
+    if not user:
+        draw_account_message(game, layout_info)
+        return
+
+    values = {
+        "nickname": user["nickname"],
+        "login_id": user["login_id"],
+        "best_score": f"{int(user.get('best_score', 0)):,}",
+        "stage": f"{int(user.get('unlocked_stage_count', 1))}단계 해금",
+    }
+    for key, value in values.items():
+        rect = layout_info["values"].get(key)
+        if rect:
+            value_rect = rect.inflate(-max(22, rect.width // 24), -max(10, rect.height // 7))
+            value_size = max(22, min(34, int(rect.height * 0.48)))
+            draw_text_fit_visual_center_in_rect(game, value, value_size, (246, 218, 150), value_rect, True, get_right_ui_font)
+
+
+def draw_account_edit(game, draw_sea_background):
+    layout_info = draw_account_panel(game, "account_edit", draw_sea_background)
+    draw_account_profile_image(game, layout_info.get("profile"))
+    draw_account_form_fields(game, layout_info)
+    draw_account_message(game, layout_info)
 
 
 # 플레이 화면 위에 올라오는 일시정지 메뉴입니다.
@@ -1427,9 +1922,10 @@ def draw_end_screen(game, clear, draw_sea_background):
 def draw_hud(game):
     if layout.has_side_panels(game):
         draw_side_hud(game)
-        return
+    else:
+        draw_top_hud(game)
 
-    draw_top_hud(game)
+    draw_boss_hp_bar(game)
 
 
 # 좁은 화면용 위쪽 HUD입니다.
@@ -1457,19 +1953,64 @@ def draw_top_hud(game):
     kills_to_boss = get_kills_to_boss(stage, get_stage_phase(game))
     if game.boss is None:
         draw_text(game, f"격침 {game.kill_count}/{kills_to_boss}", 22, YELLOW, center_x, 17, True, True)
+
+
+# 보스 전용 HP바를 플레이 영역 상단에 고정해서 그립니다.
+def draw_boss_hp_bar(game):
+    if game.boss is None:
+        return
+
+    frame_rect = layout.get_boss_hp_bar_rect(game)
+    frame_image = assets.get_stage_image(game, "boss_hp")
+    fill_image = assets.get_stage_image(game, "boss_hp_fill")
+    hp_ratio = max(0.0, min(1.0, game.boss["hp"] / max(1, game.boss["maxHp"])))
+
+    if frame_image:
+        scaled_frame = assets.get_scaled_image(game, frame_image, frame_rect.size)
+        game.screen.blit(scaled_frame, frame_rect)
     else:
-        boss_hp_rect = pygame.Rect(center_x - 130, 45, 260, 12)
-        pygame.draw.rect(game.screen, (48, 29, 35), boss_hp_rect, border_radius=6)
-        boss_fill = boss_hp_rect.copy()
-        boss_fill.width = int(boss_hp_rect.width * max(0, game.boss["hp"] / game.boss["maxHp"]))
-        pygame.draw.rect(game.screen, RED, boss_fill, border_radius=6)
-        pygame.draw.rect(game.screen, WHITE, boss_hp_rect, 1, border_radius=6)
-        if game.boss["maxShield"] > 0:
-            shield_rect = boss_hp_rect.move(0, 17)
-            pygame.draw.rect(game.screen, (29, 43, 55), shield_rect, border_radius=6)
-            shield_fill = shield_rect.copy()
-            shield_fill.width = int(shield_rect.width * max(0, game.boss["shield"] / game.boss["maxShield"]))
-            pygame.draw.rect(game.screen, BLUE, shield_fill, border_radius=6)
+        pygame.draw.rect(game.screen, (10, 11, 15), frame_rect, border_radius=max(6, frame_rect.height // 4))
+        pygame.draw.rect(game.screen, (202, 151, 62), frame_rect, 2, border_radius=max(6, frame_rect.height // 4))
+
+    fill_rect = get_boss_hp_fill_rect(game, frame_rect)
+    pygame.draw.rect(game.screen, (11, 8, 8), fill_rect, border_radius=max(2, fill_rect.height // 3))
+
+    visible_width = int(fill_rect.width * hp_ratio)
+    if visible_width > 0:
+        if fill_image:
+            scaled_fill = assets.get_scaled_image(game, fill_image, fill_rect.size)
+            fill_crop = scaled_fill.subsurface(pygame.Rect(0, 0, visible_width, fill_rect.height)).copy()
+            game.screen.blit(fill_crop, fill_rect.topleft)
+        else:
+            active_rect = fill_rect.copy()
+            active_rect.width = visible_width
+            pygame.draw.rect(game.screen, RED, active_rect, border_radius=max(2, fill_rect.height // 3))
+
+    if game.boss.get("maxShield", 0) > 0:
+        shield_ratio = max(0.0, min(1.0, game.boss.get("shield", 0) / max(1, game.boss["maxShield"])))
+        shield_rect = pygame.Rect(fill_rect.left, frame_rect.bottom + 2, fill_rect.width, max(4, frame_rect.height // 13))
+        pygame.draw.rect(game.screen, (12, 24, 34), shield_rect, border_radius=shield_rect.height // 2)
+        shield_fill = shield_rect.copy()
+        shield_fill.width = int(shield_rect.width * shield_ratio)
+        pygame.draw.rect(game.screen, BLUE, shield_fill, border_radius=shield_rect.height // 2)
+
+
+# 이미지별 장식 폭이 달라서 HP색이 들어갈 중앙 슬롯만 따로 계산합니다.
+def get_boss_hp_fill_rect(game, frame_rect):
+    if game.stage_index == 0 and getattr(game, "stage_phase", 0) == 0:
+        left_ratio, top_ratio, width_ratio, height_ratio = 0.14, 0.39, 0.80, 0.26
+    else:
+        left_ratio, top_ratio, width_ratio, height_ratio = 0.235, 0.43, 0.68, 0.20
+
+    height = max(10, int(frame_rect.height * height_ratio))
+    rect = pygame.Rect(
+        frame_rect.left + int(frame_rect.width * left_ratio),
+        frame_rect.top + int(frame_rect.height * top_ratio),
+        int(frame_rect.width * width_ratio),
+        height,
+    )
+    rect.centery = frame_rect.top + int(frame_rect.height * (top_ratio + height_ratio * 0.5))
+    return rect
 
 
 # 넓은 화면용 사이드 HUD입니다.
@@ -1532,6 +2073,7 @@ def draw_right_status_panel(game, right_area):
         for name, source_rect in RIGHT_UI_SECTIONS.items()
     }
     fonts = get_right_ui_fonts(drawn_rect, source_size)
+    draw_right_ui_header_section(game, sections["header"], fonts)
     draw_stage_info_section(game, sections["stage"], fonts)
     draw_score_section(game, sections["score"], fonts)
     draw_hp_section(game, sections["hp"], fonts)
@@ -1554,13 +2096,21 @@ def scale_right_ui_rect(drawn_rect, source_size, source_rect, clip_rect):
 def get_right_ui_fonts(drawn_rect, source_size):
     scale = min(drawn_rect.width / source_size[0], drawn_rect.height / source_size[1])
     return {
-        "label": max(16, int(36 * scale)),
-        "body": max(24, int(58 * scale)),
-        "value": max(26, int(64 * scale)),
-        "small": max(18, int(40 * scale)),
-        "tiny": max(14, int(32 * scale)),
-        "stat": max(15, int(31 * scale)),
+        "label": max(16, int(42 * scale)),
+        "body": max(24, int(66 * scale)),
+        "value": max(28, int(76 * scale)),
+        "small": max(18, int(46 * scale)),
+        "tiny": max(14, int(34 * scale)),
+        "stat": max(16, int(36 * scale)),
     }
+
+
+def draw_right_ui_header_section(game, rect, fonts):
+    old_clip = game.screen.get_clip()
+    game.screen.set_clip(rect)
+    inner = rect.inflate(-max(6, rect.width // 18), -max(2, rect.height // 8))
+    draw_hud_text_in_rect(game, "전투 현황", min(fonts["small"], max(16, int(inner.height * 0.72))), YELLOW, inner, True)
+    game.screen.set_clip(old_clip)
 
 
 def draw_stage_info_section(game, rect, fonts):
@@ -1605,19 +2155,14 @@ def draw_hp_section(game, rect, fonts):
     hp = game.player.get("hp", 0)
     max_hp = game.player.get("maxHp", 1)
     hp_ratio = max(0, min(1, hp / max(1, max_hp)))
-    hp_color = GREEN if hp_ratio > 0.45 else YELLOW if hp_ratio > 0.25 else RED
     bar_height = max(8, min(max(16, inner.height - 4), int(inner.height * 0.72)))
     bar_rect = pygame.Rect(inner.left, 0, inner.width, bar_height)
     bar_rect.centery = inner.centery
-    draw_bar(game, bar_rect, hp, max_hp, hp_color)
+    draw_hp_gauge(game, bar_rect, hp_ratio)
 
-    hp_size = min(fonts["body"], max(19, inner.height - 2))
-    text_rect = inner.inflate(-max(10, inner.width // 9), -max(2, inner.height // 7))
-    text_back = pygame.Surface(text_rect.size, pygame.SRCALPHA)
-    text_back.fill((0, 0, 0, 142))
-    game.screen.blit(text_back, text_rect)
-    pygame.draw.rect(game.screen, hp_color, text_rect, max(1, text_rect.height // 12), border_radius=max(4, text_rect.height // 2))
-    text_color = (235, 255, 235) if hp_ratio > 0.45 else (255, 238, 130) if hp_ratio > 0.25 else (255, 146, 128)
+    hp_size = min(fonts["small"], max(18, int(inner.height * 0.9)))
+    text_rect = inner.inflate(-max(8, inner.width // 11), -max(1, inner.height // 9))
+    text_color = (255, 242, 205) if hp_ratio > 0.25 else (255, 196, 168)
     draw_hud_text_in_rect(game, f"HP {int(hp)}/{max_hp}", hp_size, text_color, text_rect, True)
 
     game.screen.set_clip(old_clip)
@@ -1675,11 +2220,11 @@ def draw_skill_icon_slot(game, rect, spec, fonts):
     else:
         pygame.draw.rect(game.screen, (12, 24, 38), icon_rect, border_radius=max(3, icon_size // 14))
         pygame.draw.rect(game.screen, spec["color"], icon_rect, 2, border_radius=max(3, icon_size // 14))
-        draw_text_in_rect(game, spec["key"], fonts["body"], WHITE, icon_rect, True, True)
+        draw_text_in_rect(game, spec["key"], fonts["body"], WHITE, icon_rect, True, True, get_right_ui_font)
 
     pygame.draw.rect(game.screen, (255, 222, 126), icon_rect, max(1, icon_size // 40), border_radius=max(3, icon_size // 12))
     key_rect = pygame.Rect(icon_rect.left, icon_rect.top, max(22, icon_size // 3), max(18, icon_size // 4))
-    draw_text_in_rect(game, spec["key"], fonts["tiny"], WHITE, key_rect, True, True)
+    draw_text_in_rect(game, spec["key"], fonts["tiny"], WHITE, key_rect, True, True, get_right_ui_font)
 
     if not spec["available"]:
         draw_skill_disabled_overlay(game, icon_rect, fonts)
@@ -1701,20 +2246,27 @@ def draw_skill_disabled_overlay(game, rect, fonts):
 def draw_skill_cooldown_overlay(game, rect, cooldown, cooldown_max, fonts):
     overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
     center = (rect.width // 2, rect.height // 2)
-    radius = int(max(rect.width, rect.height) * 0.82)
+    radius = int(max(rect.width, rect.height) * 0.86)
     points = [center]
-    cooldown_ratio = max(0, min(1, cooldown / max(0.1, cooldown_max)))
-    start_angle = -90
-    end_angle = start_angle + 360 * cooldown_ratio
-    steps = max(8, int(56 * cooldown_ratio))
+    remaining_ratio = max(0, min(1, cooldown / max(0.1, cooldown_max)))
+    elapsed_ratio = 1 - remaining_ratio
+    start_angle = -90 + 360 * elapsed_ratio
+    end_angle = start_angle + 360 * remaining_ratio
+    steps = max(8, int(64 * remaining_ratio))
     for step in range(steps + 1):
         angle = math.radians(start_angle + (end_angle - start_angle) * step / max(1, steps))
         points.append((center[0] + math.cos(angle) * radius, center[1] + math.sin(angle) * radius))
     if len(points) >= 3:
-        pygame.draw.polygon(overlay, (42, 42, 46, 188), points)
+        pygame.draw.polygon(overlay, (12, 17, 23, 178), points)
     game.screen.blit(overlay, rect)
-    pygame.draw.circle(game.screen, (205, 207, 214), rect.center, max(8, min(rect.width, rect.height) // 2 - 2), 2)
-    draw_centered_skill_text(game, f"{math.ceil(cooldown)}", fonts["body"], WHITE, rect)
+    number_size = max(14, min(fonts["body"], int(rect.height * 0.38)))
+    draw_centered_skill_text(game, format_skill_cooldown_text(cooldown), number_size, WHITE, rect)
+
+
+def format_skill_cooldown_text(cooldown):
+    if cooldown < 1:
+        return f"{max(0.1, cooldown):.1f}"
+    return f"{math.ceil(cooldown)}"
 
 
 def draw_skill_active_ring(game, rect, timer, duration, color, fonts):
@@ -1730,14 +2282,14 @@ def draw_skill_active_ring(game, rect, timer, duration, color, fonts):
 
 def draw_centered_skill_text(game, text, size, color, rect):
     shadow_rect = rect.move(1, 1)
-    draw_text_in_rect(game, text, size, BLACK, shadow_rect, True, True)
-    draw_text_in_rect(game, text, size, color, rect, True, True)
+    draw_text_fit_visual_center_in_rect(game, text, size, BLACK, shadow_rect, True, get_right_ui_font, min_size=10)
+    draw_text_fit_visual_center_in_rect(game, text, size, color, rect, True, get_right_ui_font, min_size=10)
 
 
 def draw_hud_text_in_rect(game, text, size, color, rect, bold=True):
     offset = max(1, size // 18)
-    draw_text_in_rect(game, text, size, BLACK, rect.move(offset, offset), True, bold)
-    draw_text_in_rect(game, text, size, color, rect, True, bold)
+    draw_text_fit_visual_center_in_rect(game, text, size, BLACK, rect.move(offset, offset), bold, get_right_ui_font, min_size=10)
+    draw_text_fit_visual_center_in_rect(game, text, size, color, rect, bold, get_right_ui_font, min_size=10)
 
 
 def draw_acquired_augments_section(game, rect, fonts):
@@ -1875,3 +2427,24 @@ def draw_bar(game, rect, value, max_value, color):
     fill.width = int(rect.width * max(0, min(1, value / max(1, max_value))))
     pygame.draw.rect(game.screen, color, fill, border_radius=6)
     pygame.draw.rect(game.screen, WHITE, rect, 1, border_radius=6)
+
+
+def draw_hp_gauge(game, rect, hp_ratio):
+    gauge = game.images.get("hp_gauge")
+    if not gauge:
+        color = GREEN if hp_ratio > 0.45 else YELLOW if hp_ratio > 0.25 else RED
+        draw_bar(game, rect, hp_ratio, 1, color)
+        return
+
+    scaled = assets.get_scaled_image(game, gauge, rect.size)
+    empty = scaled.copy()
+    empty.fill((70, 42, 42, 112), special_flags=pygame.BLEND_RGBA_MULT)
+    game.screen.blit(empty, rect)
+
+    fill_rect = rect.copy()
+    fill_rect.width = int(rect.width * max(0, min(1, hp_ratio)))
+    if fill_rect.width > 0:
+        old_clip = game.screen.get_clip()
+        game.screen.set_clip(fill_rect.clip(old_clip))
+        game.screen.blit(scaled, rect)
+        game.screen.set_clip(old_clip)

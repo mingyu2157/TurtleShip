@@ -13,6 +13,7 @@
 #   3. unlock_stage_after_clear()는 스테이지를 깼을 때 다음 스테이지를 열어줍니다.
 import json
 
+import account_store
 from settings import BASE_DIR
 from stages import STAGE_MAX
 
@@ -89,7 +90,7 @@ def save_progress(progress):
 # 저장된 진행도를 game 객체에 적용합니다.
 # UI와 입력 처리는 game.unlocked_stage_count 값을 보고 스테이지 잠금 여부를 판단합니다.
 def apply_progress_to_game(game):
-    progress = load_progress()
+    progress = account_store.load_current_user_progress(game) or load_progress()
     game.unlocked_stage_count = progress["unlocked_stage_count"]
     game.cleared_stage_count = progress["cleared_stage_count"]
     game.stage_select_index = clamp(getattr(game, "stage_select_index", 0), 0, game.unlocked_stage_count - 1)
@@ -132,4 +133,5 @@ def unlock_stage_after_clear(game, stage_index):
     )
     game.unlocked_stage_count = progress["unlocked_stage_count"]
     game.cleared_stage_count = progress["cleared_stage_count"]
+    account_store.save_current_user_progress(game, progress)
     return progress["unlocked_stage_count"] > old_unlocked
