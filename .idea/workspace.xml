@@ -6,14 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="4dbfde2e-669f-46e9-b0c6-60cfc6068294" name="변경" comment="미완성">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/account_store.py" beforeDir="false" afterPath="$PROJECT_DIR$/account_store.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/actors.py" beforeDir="false" afterPath="$PROJECT_DIR$/actors.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bosses.py" beforeDir="false" afterPath="$PROJECT_DIR$/bosses.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/combat.py" beforeDir="false" afterPath="$PROJECT_DIR$/combat.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/game.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/game.env.example" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/input.py" beforeDir="false" afterPath="$PROJECT_DIR$/input.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scoreboard.py" beforeDir="false" afterPath="$PROJECT_DIR$/scoreboard.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ui.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -131,7 +123,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778039624660</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="미완성">
+      <option name="closed" value="true" />
+      <created>1778050383648</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1778050383648</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

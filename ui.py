@@ -1112,16 +1112,16 @@ def draw_profile_photo_in_frame(game, photo, photo_rect):
 
 
 def get_account_profile_photo_rect(frame_rect):
-    diameter = int(min(frame_rect.width, frame_rect.height) * 0.91)
+    diameter = int(min(frame_rect.width, frame_rect.height) * 0.95)
     rect = pygame.Rect(0, 0, max(1, diameter), max(1, diameter))
-    rect.center = (frame_rect.centerx, frame_rect.top + int(frame_rect.height * 0.635))
+    rect.center = (frame_rect.centerx, frame_rect.top + int(frame_rect.height * 0.653))
     return rect
 
 
 def get_profile_button_photo_rect(frame_rect):
-    diameter = int(min(frame_rect.width, frame_rect.height) * 0.74)
+    diameter = int(min(frame_rect.width, frame_rect.height) * 0.80)
     rect = pygame.Rect(0, 0, max(1, diameter), max(1, diameter))
-    rect.center = (frame_rect.centerx, frame_rect.top + int(frame_rect.height * 0.54))
+    rect.center = (frame_rect.centerx, frame_rect.top + int(frame_rect.height * 0.52))
     return rect
 
 
