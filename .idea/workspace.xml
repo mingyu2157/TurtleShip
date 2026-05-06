@@ -4,8 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4dbfde2e-669f-46e9-b0c6-60cfc6068294" name="변경" comment="05/05">
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
+    <list default="true" id="4dbfde2e-669f-46e9-b0c6-60cfc6068294" name="변경" comment="mysql 연동 미완성">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._대기음악.mp3" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._대포1.mp3" beforeDir="false" />
@@ -25,8 +25,7 @@
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._폭발음1.mp3" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._폭발음2.mp3" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._화살.mp3" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/actors.py" beforeDir="false" afterPath="$PROJECT_DIR$/actors.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets.py" beforeDir="false" afterPath="$PROJECT_DIR$/assets.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/account_store.py" beforeDir="false" afterPath="$PROJECT_DIR$/account_store.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/기본능력/._image (16).png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/기본능력/._image (17).png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/기본능력/._image (18).png" beforeDir="false" />
@@ -44,59 +43,14 @@
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/증강카드/._image (7).png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/증강카드/._image (8).png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/증강카드/._image (9).png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/audio/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/assets/audio/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/audio/bgm.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/assets/audio/bgm.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/audio/hit.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/assets/audio/hit.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/audio/pagebgm.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/assets/audio/pagebgm.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/audio/shoot.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/assets/audio/shoot.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/audio/typing.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/assets/audio/typing.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/audio/weather_lightning.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/assets/audio/weather_lightning.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/images/right_ui_panel.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/right_ui_panel.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/campaign.py" beforeDir="false" afterPath="$PROJECT_DIR$/campaign.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage1_phase2.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage1_phase2.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage2.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage2.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage3.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage3.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage4.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage4.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage5.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage5.png" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/input.py" beforeDir="false" afterPath="$PROJECT_DIR$/input.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/layout.py" beforeDir="false" afterPath="$PROJECT_DIR$/layout.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/projectiles.py" beforeDir="false" afterPath="$PROJECT_DIR$/projectiles.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/render.py" beforeDir="false" afterPath="$PROJECT_DIR$/render.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scoreboard.py" beforeDir="false" afterPath="$PROJECT_DIR$/scoreboard.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/skins.py" beforeDir="false" afterPath="$PROJECT_DIR$/skins.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/대기음악.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/대기음악.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/대포1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/대포1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/대포2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/대포2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/배경음악.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/배경음악.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스3.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스3.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스4.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스4.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스5.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스5.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/연사1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/연사1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/연사2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/연사2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/천둥번개.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/천둥번개.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/총1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/총1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/총2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/총2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/타이핑.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/타이핑.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/폭발음1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/폭발음1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/폭발음2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/폭발음2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/화살.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/화살.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/대기음악.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/대기음악.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/대포1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/대포1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/대포2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/대포2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/배경음악.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/배경음악.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스3.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스3.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스4.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스4.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/보스5.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/보스5.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/연사1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/연사1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/연사2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/연사2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/천둥번개.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/천둥번개.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/총1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/총1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/총2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/총2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/타이핑.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/타이핑.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/폭발음1.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/폭발음1.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/폭발음2.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/폭발음2.mp3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sound effect/화살.mp3" beforeDir="false" afterPath="$PROJECT_DIR$/sound effect/화살.mp3" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/run_game.command" beforeDir="false" afterPath="$PROJECT_DIR$/run_game.command" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ui.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -190,7 +144,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777967153684</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="mysql 연동 미완성">
+      <option name="closed" value="true" />
+      <created>1778030659211</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1778030659211</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -198,6 +160,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="05/05" />
-    <option name="LAST_COMMIT_MESSAGE" value="05/05" />
+    <MESSAGE value="mysql 연동 미완성" />
+    <option name="LAST_COMMIT_MESSAGE" value="mysql 연동 미완성" />
   </component>
 </project>

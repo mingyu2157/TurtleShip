@@ -835,8 +835,12 @@ def draw_account_field_value(game, text, size, color, rect):
 def draw_account_message(game, layout_info):
     message = getattr(game, "account_message_text", "")
     if not message:
-        if account_store.get_last_error() and game.game_state in ("account_login", "account_signup"):
-            message = "MySQL 설정이 필요합니다"
+        last_error = account_store.get_last_error()
+        if last_error and game.game_state in ("account_login", "account_signup"):
+            if account_store.use_api_store():
+                message = last_error
+            else:
+                message = "game.env API 주소 또는 MySQL 설정이 필요합니다"
         else:
             return
     panel = layout_info["panel"]
@@ -1962,29 +1966,33 @@ def draw_boss_hp_bar(game):
 
     frame_rect = layout.get_boss_hp_bar_rect(game)
     frame_image = assets.get_stage_image(game, "boss_hp")
-    fill_image = assets.get_stage_image(game, "boss_hp_fill")
     hp_ratio = max(0.0, min(1.0, game.boss["hp"] / max(1, game.boss["maxHp"])))
+    fill_rect = get_boss_hp_fill_rect(game, frame_rect)
 
     if frame_image:
         scaled_frame = assets.get_scaled_image(game, frame_image, frame_rect.size)
         game.screen.blit(scaled_frame, frame_rect)
+        missing_width = fill_rect.width - int(fill_rect.width * hp_ratio)
+        if missing_width > 0:
+            missing_rect = pygame.Rect(fill_rect.right - missing_width, fill_rect.top, missing_width, fill_rect.height)
+            overlay = pygame.Surface(missing_rect.size, pygame.SRCALPHA)
+            overlay.fill((7, 5, 5, 205))
+            game.screen.blit(overlay, missing_rect)
     else:
+        fill_image = assets.get_stage_image(game, "boss_hp_fill")
         pygame.draw.rect(game.screen, (10, 11, 15), frame_rect, border_radius=max(6, frame_rect.height // 4))
         pygame.draw.rect(game.screen, (202, 151, 62), frame_rect, 2, border_radius=max(6, frame_rect.height // 4))
-
-    fill_rect = get_boss_hp_fill_rect(game, frame_rect)
-    pygame.draw.rect(game.screen, (11, 8, 8), fill_rect, border_radius=max(2, fill_rect.height // 3))
-
-    visible_width = int(fill_rect.width * hp_ratio)
-    if visible_width > 0:
-        if fill_image:
-            scaled_fill = assets.get_scaled_image(game, fill_image, fill_rect.size)
-            fill_crop = scaled_fill.subsurface(pygame.Rect(0, 0, visible_width, fill_rect.height)).copy()
-            game.screen.blit(fill_crop, fill_rect.topleft)
-        else:
-            active_rect = fill_rect.copy()
-            active_rect.width = visible_width
-            pygame.draw.rect(game.screen, RED, active_rect, border_radius=max(2, fill_rect.height // 3))
+        pygame.draw.rect(game.screen, (11, 8, 8), fill_rect, border_radius=max(2, fill_rect.height // 3))
+        visible_width = int(fill_rect.width * hp_ratio)
+        if visible_width > 0:
+            if fill_image:
+                scaled_fill = assets.get_scaled_image(game, fill_image, fill_rect.size)
+                fill_crop = scaled_fill.subsurface(pygame.Rect(0, 0, visible_width, fill_rect.height)).copy()
+                game.screen.blit(fill_crop, fill_rect.topleft)
+            else:
+                active_rect = fill_rect.copy()
+                active_rect.width = visible_width
+                pygame.draw.rect(game.screen, RED, active_rect, border_radius=max(2, fill_rect.height // 3))
 
     if game.boss.get("maxShield", 0) > 0:
         shield_ratio = max(0.0, min(1.0, game.boss.get("shield", 0) / max(1, game.boss["maxShield"])))
@@ -1997,10 +2005,20 @@ def draw_boss_hp_bar(game):
 
 # 이미지별 장식 폭이 달라서 HP색이 들어갈 중앙 슬롯만 따로 계산합니다.
 def get_boss_hp_fill_rect(game, frame_rect):
-    if game.stage_index == 0 and getattr(game, "stage_phase", 0) == 0:
-        left_ratio, top_ratio, width_ratio, height_ratio = 0.14, 0.39, 0.80, 0.26
-    else:
-        left_ratio, top_ratio, width_ratio, height_ratio = 0.235, 0.43, 0.68, 0.20
+    stage_index = getattr(game, "stage_index", 0)
+    stage_phase = getattr(game, "stage_phase", 0)
+    ratio_by_stage = {
+        (0, 0): (0.14, 0.39, 0.80, 0.26),
+        (0, 1): (0.235, 0.41, 0.69, 0.23),
+        (1, None): (0.205, 0.42, 0.70, 0.21),
+        (2, None): (0.255, 0.42, 0.64, 0.22),
+        (3, None): (0.245, 0.42, 0.65, 0.22),
+        (4, None): (0.235, 0.42, 0.68, 0.22),
+    }
+    left_ratio, top_ratio, width_ratio, height_ratio = ratio_by_stage.get(
+        (stage_index, stage_phase),
+        ratio_by_stage.get((stage_index, None), (0.235, 0.43, 0.68, 0.20)),
+    )
 
     height = max(10, int(frame_rect.height * height_ratio))
     rect = pygame.Rect(

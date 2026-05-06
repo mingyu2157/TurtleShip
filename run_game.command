@@ -20,6 +20,18 @@ fi
 echo "PyShooting 실행 중..."
 echo "로그 파일: $(pwd)/last_run.log"
 
+if [ -f "game.env" ]; then
+  set -a
+  source "game.env"
+  set +a
+fi
+
+if [ -f "game.env" ]; then
+  set -a
+  source "game.env"
+  set +a
+fi
+
 "$PYTHON_BIN" main.py > last_run.log 2>&1
 status=$?
 

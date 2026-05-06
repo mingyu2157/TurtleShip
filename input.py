@@ -587,6 +587,13 @@ def handle_account_crop_key_down(game, event):
 
 
 def pick_profile_image_file():
+    path = pick_profile_image_file_tk()
+    if path:
+        return path
+    return pick_profile_image_file_macos()
+
+
+def pick_profile_image_file_tk():
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -598,6 +605,7 @@ def pick_profile_image_file():
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
+        root.update()
         return filedialog.askopenfilename(
             title="프로필 사진 선택",
             filetypes=(
@@ -613,6 +621,37 @@ def pick_profile_image_file():
                 root.destroy()
             except Exception:
                 pass
+
+
+def pick_profile_image_file_macos():
+    if sys.platform != "darwin":
+        return ""
+
+    script = (
+        'set selectedFile to choose file with prompt "프로필 사진 선택" '
+        'of type {"public.image"}\n'
+        "POSIX path of selectedFile"
+    )
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def get_account_profile_click_rect(profile_rect):
+    inflate_x = max(18, int(profile_rect.width * 0.14))
+    inflate_y = max(18, int(profile_rect.height * 0.12))
+    return profile_rect.inflate(inflate_x, inflate_y)
 
 
 def handle_account_key_down(game, event):
@@ -1041,7 +1080,7 @@ def handle_mouse_wheel(game, direction):
 def handle_account_mouse_down(game, pos):
     layout_info = ui.get_account_layout(game, game.game_state)
     profile_rect = layout_info.get("profile")
-    if profile_rect and profile_rect.collidepoint(pos):
+    if profile_rect and get_account_profile_click_rect(profile_rect).collidepoint(pos):
         assets.play_stage_sound(game, "shoot", 0.45)
         if game.game_state == "account_mypage":
             open_account_edit(game)
