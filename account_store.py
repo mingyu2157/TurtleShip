@@ -7,12 +7,18 @@ from io import BytesIO
 import json
 import os
 import secrets
+import sys
 import time
 from datetime import datetime
 from urllib import error as urlerror
+from urllib import parse as urlparse
 from urllib import request as urlrequest
 
-from PIL import Image, ImageOps
+try:
+    from PIL import Image, ImageOps
+except ModuleNotFoundError:
+    Image = None
+    ImageOps = None
 
 from stages import STAGE_MAX
 
@@ -23,6 +29,9 @@ try:
 except ModuleNotFoundError:
     mysql = None
     MySQLError = Exception
+
+
+from text_utils import normalize_korean_text
 
 
 DEFAULT_PROFILE_IMAGE_KEY = "account_profile_icon"
@@ -38,6 +47,7 @@ _schema_ready = False
 _last_error = ""
 _schema_retry_after = 0.0
 _api_access_token = ""
+API_PATH_DOMAINS = {"daviya.kr", "www.daviya.kr"}
 
 
 class AccountStoreError(Exception):
@@ -54,11 +64,38 @@ def get_last_error():
 
 
 def get_api_base_url():
-    return os.getenv("TURTLESHIP_API_BASE_URL", "").strip().rstrip("/")
+    configured = normalize_api_base_url(os.getenv("TURTLESHIP_API_BASE_URL", ""))
+    if configured:
+        return configured
+    if is_web_platform():
+        return "/api"
+    return ""
 
 
 def use_api_store():
     return bool(get_api_base_url())
+
+
+def is_web_platform():
+    return sys.platform == "emscripten"
+
+
+def normalize_api_base_url(value):
+    base_url = str(value or "").strip().rstrip("/")
+    if not base_url:
+        return ""
+    if base_url.startswith("/"):
+        return base_url or "/api"
+
+    parsed = urlparse.urlsplit(base_url)
+    if parsed.scheme in ("http", "https") and parsed.netloc:
+        host = parsed.hostname.lower() if parsed.hostname else ""
+        path = parsed.path.strip("/")
+        if host in API_PATH_DOMAINS and not path:
+            parsed = parsed._replace(path="/api")
+            return urlparse.urlunsplit(parsed).rstrip("/")
+
+    return base_url
 
 
 def get_api_timeout():
@@ -85,13 +122,27 @@ def api_token_from_game(game):
     return api_token_from_profile(current_user(game))
 
 
-def parse_api_error(raw):
+def parse_api_error(raw, status_code=None):
     if not raw:
         return "FastAPI 응답을 받지 못했습니다."
     try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return raw.decode("utf-8", errors="replace")[:200]
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return "FastAPI 응답을 읽지 못했습니다."
+
+    stripped = text.strip()
+    lowered = stripped.lower()
+    if "<html" in lowered or "<!doctype" in lowered:
+        if status_code == 404 or "404 not found" in lowered:
+            return "API 주소를 찾지 못했습니다. TURTLESHIP_API_BASE_URL에 /api가 붙어 있는지 확인하세요."
+        if status_code == 500 or "500 internal server error" in lowered:
+            return "서버에서 500 오류가 났습니다. Web1/Web2의 FastAPI와 Nginx /api 설정을 확인하세요."
+        return "FastAPI가 아닌 웹페이지 응답을 받았습니다. API 주소와 Nginx /api 설정을 확인하세요."
+
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return stripped[:200] or "FastAPI 요청 실패"
 
     detail = payload.get("detail")
     if isinstance(detail, str):
@@ -117,6 +168,9 @@ def api_request(method, path, payload=None, token="", body=None, content_type="a
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
+    if is_web_platform():
+        return browser_api_request(method, path, data, headers, parse_json)
+
     try:
         req = urlrequest.Request(api_url(path), data=data, headers=headers, method=method)
         with urlrequest.urlopen(req, timeout=get_api_timeout()) as response:
@@ -125,11 +179,47 @@ def api_request(method, path, payload=None, token="", body=None, content_type="a
                 return raw, response.headers, ""
             if not raw:
                 return {}, response.headers, ""
-            return json.loads(raw.decode("utf-8")), response.headers, ""
+            try:
+                return json.loads(raw.decode("utf-8")), response.headers, ""
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return None, {}, parse_api_error(raw)
     except urlerror.HTTPError as err:
-        return None, {}, parse_api_error(err.read())
-    except (urlerror.URLError, TimeoutError, OSError, json.JSONDecodeError) as err:
+        return None, {}, parse_api_error(err.read(), err.code)
+    except (urlerror.URLError, TimeoutError, OSError) as err:
         return None, {}, f"FastAPI 연결 실패: {err}"
+
+
+def browser_api_request(method, path, data=None, headers=None, parse_json=True):
+    try:
+        from js import XMLHttpRequest
+    except ModuleNotFoundError as err:
+        return None, {}, f"브라우저 HTTP 기능을 사용할 수 없습니다: {err}"
+
+    xhr = XMLHttpRequest.new()
+    xhr.open(method, api_url(path), False)
+    for key, value in (headers or {}).items():
+        xhr.setRequestHeader(key, value)
+
+    if isinstance(data, bytes):
+        data = data.decode("utf-8")
+
+    try:
+        xhr.send(data)
+    except Exception as err:
+        return None, {}, f"FastAPI 연결 실패: {err}"
+
+    status = int(xhr.status or 0)
+    raw_text = str(xhr.responseText or "")
+    if status < 200 or status >= 300:
+        return None, {}, parse_api_error(raw_text.encode("utf-8"), status)
+    if not parse_json:
+        return raw_text.encode("utf-8"), {}, ""
+    if not raw_text:
+        return {}, {}, ""
+    try:
+        return json.loads(raw_text), {}, ""
+    except json.JSONDecodeError:
+        return None, {}, parse_api_error(raw_text.encode("utf-8"))
 
 
 def normalize_api_profile(user, token=""):
@@ -138,7 +228,7 @@ def normalize_api_profile(user, token=""):
     profile = {
         "id": int(user.get("id", 0)),
         "login_id": str(user.get("login_id", "")),
-        "nickname": str(user.get("nickname", "")),
+        "nickname": clean_nickname(user.get("nickname", "")),
         "profile_image_key": user.get("profile_image_key") or DEFAULT_PROFILE_IMAGE_KEY,
         "profile_image_data": None,
         "profile_image_mime": user.get("profile_image_mime") or "image/png",
@@ -165,6 +255,8 @@ def load_api_profile_image(token):
 def attach_api_profile_image(profile, has_profile_image):
     if not profile or not has_profile_image:
         return profile, ""
+    if is_web_platform():
+        return profile, ""
     token = api_token_from_profile(profile)
     image_data, image_mime, message = load_api_profile_image(token)
     if message:
@@ -190,6 +282,8 @@ def profile_from_auth_response(payload):
 
 
 def upload_api_profile_image(token, image_data, image_mime):
+    if is_web_platform():
+        return None, "웹 버전에서는 프로필 이미지 업로드를 지원하지 않습니다."
     if not token or not image_data:
         return None, ""
     boundary = f"----TurtleShipProfile{secrets.token_hex(12)}"
@@ -334,6 +428,8 @@ def ensure_column(cursor, table_name, column_name, definition):
 
 
 def load_profile_image(path):
+    if Image is None or ImageOps is None:
+        return None, "이미지 처리 패키지를 찾을 수 없습니다."
     if not path:
         return None, ""
 
@@ -394,9 +490,9 @@ def clean_login_id(login_id):
 
 
 def clean_nickname(nickname):
-    text = str(nickname or "").strip()
+    text = normalize_korean_text(nickname).strip()
     text = " ".join(text.split())
-    return text[:MAX_NICKNAME_LENGTH]
+    return normalize_korean_text(text)[:MAX_NICKNAME_LENGTH]
 
 
 def validate_credentials(login_id, password, nickname=None):
@@ -430,7 +526,7 @@ def normalize_profile(row):
     return {
         "id": int(row["id"]),
         "login_id": str(row["login_id"]),
-        "nickname": str(row["nickname"]),
+        "nickname": clean_nickname(row["nickname"]),
         "profile_image_key": row.get("profile_image_key") or DEFAULT_PROFILE_IMAGE_KEY,
         "profile_image_data": image_data,
         "profile_image_mime": row.get("profile_image_mime") or "image/png",
@@ -624,6 +720,14 @@ def update_user_profile(user_id, login_id, password, nickname, profile_image_dat
                     """,
                     (login_id, nickname, *image_args, user_id),
                 )
+            cursor.execute(
+                """
+                UPDATE score_entries
+                SET nickname = %s
+                WHERE user_id = %s
+                """,
+                (nickname, user_id),
+            )
             connection.commit()
             cursor.execute(
                 """

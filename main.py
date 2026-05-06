@@ -148,6 +148,9 @@ class Game:
         self.score_name_input = ""
         self.leaderboard_entries = []
         self.leaderboard_last_rank = None
+        self.leaderboard_sync_interval = 300.0
+        self.leaderboard_next_sync_at = 0.0
+        self.score_mode_leaderboard_snapshot = []
         self.account_user = None
         self.account_access_token = ""
         self.account_previous_state = "menu"
@@ -158,6 +161,7 @@ class Game:
         self.account_profile_upload_bytes = None
         self.account_profile_upload_mime = None
         self.account_profile_upload_changed = False
+        self.account_crop_focus_index = 0
         self.account_crop_previous_state = "account_signup"
         self.account_crop_path = ""
         self.account_crop_surface = None
@@ -165,6 +169,7 @@ class Game:
         self.account_crop_box = None
         self.account_crop_dragging = False
         self.account_crop_drag_last = None
+        self.mouse_click_block_until_ms = 0
         self.hakikjin_unlocked = False
         self.shoot_cooldown = 0
         self.obstacle_spawn_timer = 0

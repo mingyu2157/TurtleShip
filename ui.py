@@ -15,6 +15,7 @@ from pathlib import Path
 import math
 from time import sleep
 
+from PIL import Image
 import pygame
 
 import account_store
@@ -75,6 +76,12 @@ ACCOUNT_PANEL_IMAGES = {
     "account_mypage": "account_mypage_panel",
     "account_edit": "account_edit_panel",
 }
+ACCOUNT_BUTTON_ORDER = {
+    "account_login": ("login", "signup", "back"),
+    "account_signup": ("submit", "back"),
+    "account_mypage": ("edit", "back"),
+    "account_edit": ("save", "back"),
+}
 ACCOUNT_SOURCE_RECTS = {
     "account_login": {
         "fields": (("login_id", (260, 356, 940, 92)), ("password", (260, 494, 940, 92))),
@@ -85,8 +92,9 @@ ACCOUNT_SOURCE_RECTS = {
         },
     },
     "account_signup": {
-        "fields": (("nickname", (744, 342, 560, 88)), ("login_id", (744, 476, 560, 88)), ("password", (744, 612, 560, 88))),
+        "fields": (("nickname", (760, 344, 535, 78)), ("login_id", (760, 480, 535, 78)), ("password", (760, 616, 535, 78))),
         "profile": (170, 300, 350, 360),
+        "profile_button": (196, 710, 330, 76),
         "buttons": {
             "submit": (260, 820, 420, 90),
             "back": (770, 820, 420, 90),
@@ -95,10 +103,10 @@ ACCOUNT_SOURCE_RECTS = {
     "account_mypage": {
         "profile": (170, 310, 350, 360),
         "values": {
-            "nickname": (744, 344, 560, 82),
-            "login_id": (744, 476, 560, 82),
-            "best_score": (744, 606, 560, 82),
-            "stage": (744, 738, 560, 82),
+            "nickname": (760, 346, 535, 72),
+            "login_id": (760, 462, 535, 72),
+            "best_score": (760, 577, 535, 72),
+            "stage": (760, 686, 535, 72),
         },
         "buttons": {
             "edit": (268, 828, 418, 88),
@@ -106,8 +114,9 @@ ACCOUNT_SOURCE_RECTS = {
         },
     },
     "account_edit": {
-        "fields": (("nickname", (744, 344, 560, 88)), ("login_id", (744, 476, 560, 88)), ("password", (744, 612, 560, 88))),
+        "fields": (("nickname", (760, 346, 535, 78)), ("login_id", (760, 480, 535, 78)), ("password", (760, 616, 535, 78))),
         "profile": (170, 300, 350, 360),
+        "profile_button": (196, 710, 330, 76),
         "buttons": {
             "save": (268, 828, 418, 88),
             "back": (778, 828, 418, 88),
@@ -252,14 +261,11 @@ def draw_soft_focus_frame(game, rect, selected=False, hovered=False, radius=8):
     if not selected and not hovered:
         return
 
-    outer_rect = rect.inflate(18 if selected else 12, 18 if selected else 12)
+    outer_rect = rect.inflate(10 if selected else 6, 10 if selected else 6)
     glow = pygame.Surface(outer_rect.size, pygame.SRCALPHA)
-    pygame.draw.rect(glow, (255, 214, 94, 34 if hovered else 24), glow.get_rect(), border_radius=radius + 6)
+    for width, alpha in ((6, 24 if selected else 16), (2, 82 if hovered else 62)):
+        pygame.draw.rect(glow, (255, 214, 94, alpha), glow.get_rect(), width, border_radius=radius + 5)
     game.screen.blit(glow, outer_rect)
-
-    fill = pygame.Surface(rect.size, pygame.SRCALPHA)
-    fill.fill((255, 221, 118, 28 if hovered else 18))
-    game.screen.blit(fill, rect)
 
     border_color = (255, 228, 134) if hovered else (255, 207, 78)
     pygame.draw.rect(game.screen, border_color, rect, 3 if selected else 2, border_radius=radius)
@@ -607,11 +613,16 @@ def draw_menu(game, draw_sea_background):
     start_rect = layout.get_start_button_rect(game)
     login_rect = layout.get_login_button_rect(game)
     mouse_pos = pygame.mouse.get_pos()
+    selected_button = "login" if getattr(game, "menu_select_index", 0) == 1 else "start"
+    start_hovered = start_rect.collidepoint(mouse_pos)
+    login_hovered = login_rect.collidepoint(mouse_pos)
+    start_selected = selected_button == "start"
+    login_selected = selected_button == "login"
     if menu_image:
-        draw_menu_baked_button_highlight(game, start_rect, True, start_rect.collidepoint(mouse_pos))
+        draw_menu_baked_button_highlight(game, start_rect, start_selected, start_hovered)
     else:
-        draw_menu_mode_button(game, start_rect, "게임 시작", True, start_rect.collidepoint(mouse_pos))
-    draw_menu_login_button(game, login_rect, login_rect.collidepoint(mouse_pos), getattr(game, "menu_pressed_button", "") == "login")
+        draw_menu_mode_button(game, start_rect, "게임 시작", start_selected, start_hovered)
+    draw_menu_login_button(game, login_rect, login_hovered or login_selected, getattr(game, "menu_pressed_button", "") == "login")
 
 
 def draw_mode_select(game, draw_sea_background):
@@ -801,8 +812,12 @@ def get_profile_button_rect(game):
 def draw_profile_button(game):
     rect = get_profile_button_rect(game)
     icon = game.images.get(account_store.DEFAULT_PROFILE_IMAGE_KEY)
+    icon_content = None
+    icon_rect = rect
     if icon:
-        draw_image_content_contain_in_rect(game, icon, rect)
+        icon_content = get_image_content_surface(game, icon) or icon
+        icon_rect = get_image_contain_rect_in_rect(icon_content, rect)
+        draw_image_contain_in_rect(game, icon_content, icon_rect)
     else:
         pygame.draw.circle(game.screen, (14, 14, 14), rect.center, rect.width // 2)
         pygame.draw.circle(game.screen, (224, 176, 78), rect.center, rect.width // 2 - 2, 2)
@@ -810,7 +825,9 @@ def draw_profile_button(game):
     user = account_store.current_user(game)
     photo = get_account_profile_surface(game, user)
     if photo:
-        draw_profile_photo_in_frame(game, photo, rect)
+        draw_profile_photo_in_frame(game, photo, get_profile_button_photo_rect(icon_rect))
+        if icon_content:
+            draw_profile_frame_overlay(game, icon_content, icon_content.get_rect(), icon_rect)
 
     hovered = rect.collidepoint(pygame.mouse.get_pos())
     if hovered:
@@ -843,19 +860,125 @@ def get_account_panel_rect(game, state):
 
 def get_account_layout(game, state):
     panel = get_account_panel_rect(game, state)
-    source_size = game.images.get(ACCOUNT_PANEL_IMAGES.get(state, "")).get_size() if game.images.get(ACCOUNT_PANEL_IMAGES.get(state, "")) else ACCOUNT_SOURCE_SIZE
+    image_key = ACCOUNT_PANEL_IMAGES.get(state, "")
+    image = game.images.get(image_key)
+    source_size = image.get_size() if image else ACCOUNT_SOURCE_SIZE
     source = ACCOUNT_SOURCE_RECTS.get(state, {})
-    fields = [(name, scale_source_rect(panel, source_size, rect)) for name, rect in source.get("fields", ())]
-    buttons = {name: scale_source_rect(panel, source_size, rect) for name, rect in source.get("buttons", {}).items()}
-    values = {name: scale_source_rect(panel, source_size, rect) for name, rect in source.get("values", {}).items()}
-    profile = scale_source_rect(panel, source_size, source["profile"]) if "profile" in source else None
+    source_fields = [(name, pygame.Rect(rect)) for name, rect in source.get("fields", ())]
+    source_buttons = {name: pygame.Rect(rect) for name, rect in source.get("buttons", {}).items()}
+    source_values = {name: pygame.Rect(rect) for name, rect in source.get("values", {}).items()}
+    source_profile = pygame.Rect(source["profile"]) if "profile" in source else None
+    source_profile_button = pygame.Rect(source["profile_button"]) if "profile_button" in source else None
+    fields = [(name, scale_source_rect(panel, source_size, rect)) for name, rect in source_fields]
+    buttons = {name: scale_source_rect(panel, source_size, rect) for name, rect in source_buttons.items()}
+    values = {name: scale_source_rect(panel, source_size, rect) for name, rect in source_values.items()}
+    profile = scale_source_rect(panel, source_size, source_profile) if source_profile else None
+    profile_button = scale_source_rect(panel, source_size, source_profile_button) if source_profile_button else None
     return {
+        "state": state,
+        "image_key": image_key,
         "panel": panel,
+        "source_size": source_size,
+        "source_fields": source_fields,
+        "source_buttons": source_buttons,
+        "source_values": source_values,
+        "source_profile": source_profile,
+        "source_profile_button": source_profile_button,
         "fields": fields,
         "buttons": buttons,
         "values": values,
         "profile": profile,
+        "profile_button": profile_button,
     }
+
+
+def get_account_profile_hit_rect(profile_rect):
+    inflate_x = max(18, int(profile_rect.width * 0.14))
+    inflate_y = max(18, int(profile_rect.height * 0.12))
+    return profile_rect.inflate(inflate_x, inflate_y)
+
+
+def get_account_focus_items(layout_info, state):
+    source_fields = {name: rect for name, rect in layout_info.get("source_fields", [])}
+    source_buttons = layout_info.get("source_buttons", {})
+    fields = [
+        {
+            "kind": "field",
+            "name": name,
+            "rect": rect,
+            "hit_rects": (rect,),
+            "draw_rects": (rect,),
+            "source_rects": (source_fields[name],) if name in source_fields else (),
+            "source_shapes": ("border",) if name in source_fields else (),
+        }
+        for name, rect in layout_info.get("fields", [])
+    ]
+    buttons = [
+        {
+            "kind": "button",
+            "name": name,
+            "rect": layout_info["buttons"][name],
+            "hit_rects": (layout_info["buttons"][name],),
+            "draw_rects": (layout_info["buttons"][name],),
+            "source_rects": (source_buttons[name],) if name in source_buttons else (),
+            "source_shapes": ("border",) if name in source_buttons else (),
+        }
+        for name in ACCOUNT_BUTTON_ORDER.get(state, ())
+        if name in layout_info.get("buttons", {})
+    ]
+
+    profile_item = None
+    if state in ("account_signup", "account_mypage", "account_edit"):
+        profile_rect = layout_info.get("profile")
+        profile_button = layout_info.get("profile_button")
+        source_profile = layout_info.get("source_profile")
+        source_profile_button = layout_info.get("source_profile_button")
+        hit_rects = []
+        draw_rects = []
+        source_rects = []
+        source_shapes = []
+        if profile_rect:
+            hit_rects.append(get_account_profile_hit_rect(profile_rect))
+            draw_rects.append(profile_rect)
+            if source_profile:
+                source_rects.append(source_profile)
+                source_shapes.append("profile")
+        if profile_button:
+            hit_rects.append(profile_button)
+            draw_rects.append(profile_button)
+            if source_profile_button:
+                source_rects.append(source_profile_button)
+                source_shapes.append("border")
+        if hit_rects:
+            profile_item = {
+                "kind": "profile",
+                "name": "profile",
+                "rect": profile_button or profile_rect,
+                "hit_rects": tuple(hit_rects),
+                "draw_rects": tuple(draw_rects),
+                "source_rects": tuple(source_rects),
+                "source_shapes": tuple(source_shapes),
+            }
+
+    if state == "account_mypage":
+        return ([profile_item] if profile_item else []) + buttons
+    return fields + ([profile_item] if profile_item else []) + buttons
+
+
+def get_account_focus_item(layout_info, state, focus_index):
+    items = get_account_focus_items(layout_info, state)
+    if not items:
+        return None
+    return items[max(0, min(focus_index, len(items) - 1))]
+
+
+def get_account_hovered_focus_index(layout_info, state, mouse_pos, items=None):
+    if items is None:
+        items = get_account_focus_items(layout_info, state)
+    for index, item in enumerate(items):
+        if any(rect.collidepoint(mouse_pos) for rect in item.get("hit_rects", (item["rect"],))):
+            return index
+    return None
 
 
 def draw_account_panel(game, state, draw_sea_background):
@@ -875,15 +998,17 @@ def draw_account_panel(game, state, draw_sea_background):
 
 def draw_account_form_fields(game, layout_info, include_cursor=True):
     form = getattr(game, "account_form", {})
-    focus_index = getattr(game, "account_focus_index", 0)
+    focus_item = get_account_focus_item(
+        layout_info,
+        getattr(game, "game_state", ""),
+        getattr(game, "account_focus_index", 0),
+    )
     cursor = "|" if include_cursor and pygame.time.get_ticks() // 450 % 2 == 0 else ""
-    for index, (name, rect) in enumerate(layout_info.get("fields", [])):
-        if index == focus_index:
-            draw_soft_focus_frame(game, rect, selected=True, hovered=False, radius=8)
+    for name, rect in layout_info.get("fields", []):
         text = form.get(name, "")
         if name == "password":
             text = "*" * len(text)
-        if index == focus_index:
+        if focus_item and focus_item["kind"] == "field" and focus_item["name"] == name:
             text = f"{text}{cursor}"
         color = (246, 218, 150) if text else (154, 119, 70)
         text_rect = rect.inflate(-max(20, rect.width // 20), -max(4, rect.height // 8))
@@ -934,13 +1059,18 @@ def draw_account_button_feedback(game, layout_info):
         draw_soft_focus_frame(game, rect, selected=False, hovered=rect.collidepoint(mouse_pos), radius=8)
 
 
-def draw_account_profile_image(game, rect):
+def draw_account_profile_image(game, layout_info):
+    rect = layout_info.get("profile") if layout_info else None
     if not rect:
         return
     user = account_store.current_user(game)
     photo = get_account_profile_surface(game, user)
     if photo:
-        draw_profile_photo_in_frame(game, photo, rect)
+        draw_profile_photo_in_frame(game, photo, get_account_profile_photo_rect(rect))
+        image = game.images.get(layout_info.get("image_key", ""))
+        source_rect = layout_info.get("source_profile")
+        if image and source_rect:
+            draw_profile_frame_overlay(game, image, source_rect, rect)
 
 
 def get_account_profile_surface(game, user=None):
@@ -964,8 +1094,7 @@ def get_account_profile_surface(game, user=None):
     return surface
 
 
-def draw_profile_photo_in_frame(game, photo, frame_rect):
-    photo_rect = get_profile_photo_inner_rect(frame_rect)
+def draw_profile_photo_in_frame(game, photo, photo_rect):
     if photo_rect.width <= 0 or photo_rect.height <= 0:
         return
 
@@ -974,6 +1103,7 @@ def draw_profile_photo_in_frame(game, photo, frame_rect):
     scaled = assets.get_scaled_image(game, photo, cover_rect.size)
 
     circle = pygame.Surface(photo_rect.size, pygame.SRCALPHA)
+    pygame.draw.ellipse(circle, (9, 10, 10, 255), local_rect)
     circle.blit(scaled, cover_rect)
     mask = pygame.Surface(photo_rect.size, pygame.SRCALPHA)
     pygame.draw.ellipse(mask, (255, 255, 255, 255), mask.get_rect())
@@ -981,11 +1111,59 @@ def draw_profile_photo_in_frame(game, photo, frame_rect):
     game.screen.blit(circle, photo_rect)
 
 
-def get_profile_photo_inner_rect(frame_rect):
-    diameter = int(min(frame_rect.width, frame_rect.height) * 0.62)
+def get_account_profile_photo_rect(frame_rect):
+    diameter = int(min(frame_rect.width, frame_rect.height) * 0.91)
     rect = pygame.Rect(0, 0, max(1, diameter), max(1, diameter))
-    rect.center = (frame_rect.centerx, frame_rect.centery - int(frame_rect.height * 0.035))
+    rect.center = (frame_rect.centerx, frame_rect.top + int(frame_rect.height * 0.635))
     return rect
+
+
+def get_profile_button_photo_rect(frame_rect):
+    diameter = int(min(frame_rect.width, frame_rect.height) * 0.74)
+    rect = pygame.Rect(0, 0, max(1, diameter), max(1, diameter))
+    rect.center = (frame_rect.centerx, frame_rect.top + int(frame_rect.height * 0.54))
+    return rect
+
+
+def get_profile_frame_overlay_patch(game, image, source_rect, size):
+    cache = getattr(game, "account_profile_frame_overlay_cache", None)
+    if cache is None:
+        cache = {}
+        game.account_profile_frame_overlay_cache = cache
+
+    width, height = max(1, int(size[0])), max(1, int(size[1]))
+    source_rect = source_rect.clip(image.get_rect())
+    key = (id(image), source_rect.x, source_rect.y, source_rect.width, source_rect.height, width, height)
+    if key in cache:
+        return cache[key]
+    if source_rect.width <= 0 or source_rect.height <= 0:
+        return None
+
+    patch = image.subsurface(source_rect).copy()
+    raw = pygame.image.tostring(patch, "RGBA")
+    patch_image = Image.frombytes("RGBA", patch.get_size(), raw)
+    overlay = Image.new("RGBA", patch_image.size, (0, 0, 0, 0))
+    overlay_pixels = []
+    for red, green, blue, alpha in patch_image.getdata():
+        gold_score = min(red - blue, green - blue, red - green + 96)
+        if alpha > 8 and red > 58 and green > 42 and gold_score > 16 and red + green > 126:
+            overlay_pixels.append((red, green, blue, alpha))
+        else:
+            overlay_pixels.append((0, 0, 0, 0))
+    overlay.putdata(overlay_pixels)
+
+    surface = pygame.image.fromstring(overlay.tobytes(), overlay.size, "RGBA").convert_alpha()
+    scaled = pygame.transform.smoothscale(surface, (width, height))
+    if len(cache) >= 32:
+        cache.clear()
+    cache[key] = scaled
+    return scaled
+
+
+def draw_profile_frame_overlay(game, image, source_rect, draw_rect):
+    overlay = get_profile_frame_overlay_patch(game, image, source_rect, draw_rect.size)
+    if overlay:
+        game.screen.blit(overlay, draw_rect)
 
 
 def get_account_profile_crop_layout(game):
@@ -1127,28 +1305,150 @@ def draw_account_profile_crop(game, draw_sea_background):
     draw_account_crop_preview(game, layout_info["preview"])
     draw_account_crop_circle_preview(game, layout_info["circle"])
 
-    draw_menu_mode_button(game, layout_info["confirm"], "업로드", True, layout_info["confirm"].collidepoint(pygame.mouse.get_pos()))
-    draw_menu_mode_button(game, layout_info["cancel"], "취소", False, layout_info["cancel"].collidepoint(pygame.mouse.get_pos()))
+    focus_index = max(0, min(getattr(game, "account_crop_focus_index", 0), 1))
+    draw_menu_mode_button(
+        game,
+        layout_info["confirm"],
+        "업로드",
+        focus_index == 0,
+        layout_info["confirm"].collidepoint(pygame.mouse.get_pos()),
+    )
+    draw_menu_mode_button(
+        game,
+        layout_info["cancel"],
+        "취소",
+        focus_index == 1,
+        layout_info["cancel"].collidepoint(pygame.mouse.get_pos()),
+    )
+
+
+def get_account_focus_patch(game, image, source_rect, size, shape="border"):
+    cache = getattr(game, "account_focus_patch_cache", None)
+    if cache is None:
+        cache = {}
+        game.account_focus_patch_cache = cache
+
+    width, height = max(1, int(size[0])), max(1, int(size[1]))
+    key = (id(image), source_rect.x, source_rect.y, source_rect.width, source_rect.height, width, height, shape)
+    if key in cache:
+        return cache[key]
+
+    source_rect = source_rect.clip(image.get_rect())
+    if source_rect.width <= 0 or source_rect.height <= 0:
+        return None
+
+    patch = image.subsurface(source_rect).copy()
+    raw = pygame.image.tostring(patch, "RGBA")
+    patch_image = Image.frombytes("RGBA", patch.get_size(), raw)
+    highlight = Image.new("RGBA", patch_image.size, (0, 0, 0, 0))
+    highlight_pixels = []
+    source_width, source_height = patch_image.size
+    border_margin = max(6, min(source_width, source_height) // 9)
+    center_x = source_width / 2
+    center_y = source_height / 2
+    ring_radius = min(source_width, source_height) * 0.4
+    ring_width = max(14, min(source_width, source_height) * 0.09)
+    for index, (red, green, blue, alpha) in enumerate(patch_image.getdata()):
+        x = index % source_width
+        y = index // source_width
+        if shape == "profile":
+            distance = math.hypot(x - center_x, y - center_y)
+            in_focus_band = abs(distance - ring_radius) <= ring_width
+        else:
+            in_focus_band = (
+                x < border_margin
+                or x >= source_width - border_margin
+                or y < border_margin
+                or y >= source_height - border_margin
+            )
+
+        gold_score = min(red - blue, green - blue, red - green + 80)
+        if in_focus_band and alpha > 8 and red > 58 and green > 42 and gold_score > 20 and red + green > 130:
+            highlight_alpha = max(34, min(130, int((red + green) * 0.2 + gold_score * 0.8)))
+            highlight_pixels.append((255, 205, 86, highlight_alpha))
+        else:
+            highlight_pixels.append((0, 0, 0, 0))
+    highlight.putdata(highlight_pixels)
+    highlight = pygame.image.fromstring(highlight.tobytes(), highlight.size, "RGBA").convert_alpha()
+    scaled = pygame.transform.smoothscale(highlight, (width, height))
+    if len(cache) >= 64:
+        cache.clear()
+    cache[key] = scaled
+    return scaled
+
+
+def draw_account_image_light(game, layout_info, source_rect, draw_rect, selected, hovered, shape="border"):
+    image = game.images.get(layout_info.get("image_key", ""))
+    if image is None or source_rect is None or draw_rect is None:
+        return False
+
+    patch = get_account_focus_patch(game, image, source_rect, draw_rect.size, shape)
+    if patch is None:
+        return False
+
+    pulse = int(24 * (0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 180)))
+    alpha = 188 + pulse if selected else 112
+    offsets = ((0, 0),)
+    if selected:
+        offsets = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
+
+    for offset_x, offset_y in offsets:
+        lit = patch.copy()
+        lit.set_alpha(alpha if offset_x == 0 and offset_y == 0 else max(28, alpha // 4))
+        game.screen.blit(lit, draw_rect.move(offset_x, offset_y))
+    return True
+
+
+def draw_account_focus_rect(game, rect, selected, hovered):
+    pulse = int(14 * (0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 180)))
+    alpha = 70 + pulse if selected else 42
+    width = 3 if selected else 2
+    border_radius = max(6, min(12, rect.height // 5))
+    glow_rect = rect.inflate(2, 2)
+    glow = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+    pygame.draw.rect(glow, (255, 220, 112, alpha), glow.get_rect(), width, border_radius=border_radius)
+    game.screen.blit(glow, glow_rect)
+
+
+def draw_account_focus_indicators(game, layout_info, state):
+    items = get_account_focus_items(layout_info, state)
+    if not items:
+        return
+
+    focus_index = max(0, min(getattr(game, "account_focus_index", 0), len(items) - 1))
+    hovered_index = get_account_hovered_focus_index(layout_info, state, pygame.mouse.get_pos(), items)
+    for index, item in enumerate(items):
+        selected = index == focus_index
+        hovered = index == hovered_index
+        if not selected and not hovered:
+            continue
+        drew_image_light = False
+        source_shapes = item.get("source_shapes", ())
+        for light_index, (source_rect, draw_rect) in enumerate(zip(item.get("source_rects", ()), item.get("draw_rects", ()))):
+            shape = source_shapes[light_index] if light_index < len(source_shapes) else "border"
+            drew_image_light = draw_account_image_light(game, layout_info, source_rect, draw_rect, selected, hovered, shape) or drew_image_light
+        if not drew_image_light:
+            draw_account_focus_rect(game, item["rect"], selected, hovered)
 
 
 def draw_account_login(game, draw_sea_background):
     layout_info = draw_account_panel(game, "account_login", draw_sea_background)
     draw_account_form_fields(game, layout_info)
     draw_account_message(game, layout_info)
-    draw_account_button_feedback(game, layout_info)
+    draw_account_focus_indicators(game, layout_info, "account_login")
 
 
 def draw_account_signup(game, draw_sea_background):
     layout_info = draw_account_panel(game, "account_signup", draw_sea_background)
-    draw_account_profile_image(game, layout_info.get("profile"))
+    draw_account_profile_image(game, layout_info)
     draw_account_form_fields(game, layout_info)
     draw_account_message(game, layout_info)
-    draw_account_button_feedback(game, layout_info)
+    draw_account_focus_indicators(game, layout_info, "account_signup")
 
 
 def draw_account_mypage(game, draw_sea_background):
     layout_info = draw_account_panel(game, "account_mypage", draw_sea_background)
-    draw_account_profile_image(game, layout_info.get("profile"))
+    draw_account_profile_image(game, layout_info)
     user = account_store.current_user(game)
     if not user:
         draw_account_message(game, layout_info)
@@ -1164,17 +1464,17 @@ def draw_account_mypage(game, draw_sea_background):
         rect = layout_info["values"].get(key)
         if rect:
             value_rect = rect.inflate(-max(22, rect.width // 24), -max(10, rect.height // 7))
-            value_size = max(22, min(34, int(rect.height * 0.48)))
+            value_size = max(20, min(30, int(rect.height * 0.44)))
             draw_text_fit_visual_center_in_rect(game, value, value_size, (246, 218, 150), value_rect, True, get_right_ui_font)
-    draw_account_button_feedback(game, layout_info)
+    draw_account_focus_indicators(game, layout_info, "account_mypage")
 
 
 def draw_account_edit(game, draw_sea_background):
     layout_info = draw_account_panel(game, "account_edit", draw_sea_background)
-    draw_account_profile_image(game, layout_info.get("profile"))
+    draw_account_profile_image(game, layout_info)
     draw_account_form_fields(game, layout_info)
     draw_account_message(game, layout_info)
-    draw_account_button_feedback(game, layout_info)
+    draw_account_focus_indicators(game, layout_info, "account_edit")
 
 
 # 플레이 화면 위에 올라오는 일시정지 메뉴입니다.
@@ -1870,14 +2170,21 @@ def get_leaderboard_layout(game, drawn_rect, source_size):
     }
 
 
-def refresh_leaderboard_entries(game):
-    entries = scoreboard.load_scores()
-    game.leaderboard_entries = entries
-    return entries
+def refresh_leaderboard_entries(game, force=False):
+    now = pygame.time.get_ticks() / 1000.0
+    interval = max(30.0, float(getattr(game, "leaderboard_sync_interval", 300.0)))
+    cached_entries = getattr(game, "leaderboard_entries", [])
+    next_sync_at = float(getattr(game, "leaderboard_next_sync_at", 0.0))
+    if force or not cached_entries or now >= next_sync_at:
+        cached_entries = scoreboard.load_scores()
+        game.leaderboard_entries = cached_entries
+        game.leaderboard_next_sync_at = now + interval
+    return cached_entries
 
 
-def draw_leaderboard_entries(game, drawn_rect, source_size, show_status=True):
-    entries = refresh_leaderboard_entries(game)
+def draw_leaderboard_entries(game, drawn_rect, source_size, show_status=True, entries=None, allow_refresh=True):
+    if entries is None:
+        entries = refresh_leaderboard_entries(game) if allow_refresh else getattr(game, "leaderboard_entries", [])
     layout_info = get_leaderboard_layout(game, drawn_rect, source_size)
     last_rank = getattr(game, "leaderboard_last_rank", None)
 
@@ -2137,6 +2444,7 @@ def draw_score_mode_left_leaderboard(game, left_area):
         return
 
     panel = left_area.copy()
+    snapshot_entries = getattr(game, "score_mode_leaderboard_snapshot", []) or getattr(game, "leaderboard_entries", [])
     background = get_vertical_leaderboard_background(game)
     if background:
         old_clip = game.screen.get_clip()
@@ -2144,11 +2452,11 @@ def draw_score_mode_left_leaderboard(game, left_area):
         drawn_rect = get_image_cover_rect_in_rect(background, panel)
         scaled = assets.get_scaled_image(game, background, drawn_rect.size)
         game.screen.blit(scaled, drawn_rect)
-        draw_leaderboard_entries(game, drawn_rect, background.get_size(), show_status=True)
+        draw_leaderboard_entries(game, drawn_rect, background.get_size(), show_status=True, entries=snapshot_entries, allow_refresh=False)
         game.screen.set_clip(old_clip)
     else:
         draw_side_panel(game, panel)
-        entries = refresh_leaderboard_entries(game)
+        entries = snapshot_entries
         title_rect = pygame.Rect(panel.left + 12, panel.top + 12, panel.width - 24, 28)
         draw_text_fit_in_rect(game, "명예의 기록", 20, YELLOW, title_rect, True, True, get_story_font)
         y = title_rect.bottom + 8

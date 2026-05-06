@@ -93,15 +93,34 @@ def confirm_score_name(game):
     open_score_leaderboard(game)
 
 
-def open_score_leaderboard(game):
+def open_score_leaderboard(game, fallback_entries=None):
     game.game_mode = "score"
     game.game_state = "score_leaderboard"
     game.paused = False
     clear_battlefield(game)
-    game.leaderboard_entries = scoreboard.load_scores()
+    sync_score_leaderboard_cache(game, fallback_entries)
     game.message_text = ""
     game.message_timer = 0
     assets.play_menu_music(game)
+
+
+def set_leaderboard_cache(game, entries):
+    game.leaderboard_entries = list(entries or [])
+    interval = max(30.0, float(getattr(game, "leaderboard_sync_interval", 300.0)))
+    game.leaderboard_next_sync_at = pygame.time.get_ticks() / 1000.0 + interval
+
+
+def snapshot_score_leaderboard(game):
+    game.score_mode_leaderboard_snapshot = [dict(entry) for entry in getattr(game, "leaderboard_entries", [])]
+
+
+def sync_score_leaderboard_cache(game, fallback_entries=None):
+    entries = scoreboard.load_scores()
+    if not entries and fallback_entries:
+        entries = fallback_entries
+    set_leaderboard_cache(game, entries)
+    snapshot_score_leaderboard(game)
+    return game.leaderboard_entries
 
 
 
@@ -408,6 +427,7 @@ def start_score_mode(game):
     game.message_timer = 0
     game.message_text = "점수 경쟁 시작"
     game.leaderboard_last_rank = None
+    sync_score_leaderboard_cache(game)
     game.paused = False
     results.reset_stage_stats(game)
     clear_battlefield(game)
@@ -529,7 +549,7 @@ def advance_to_next_stage_phase(game):
 def close_stage_result(game):
     result = getattr(game, "stage_result", {})
     if getattr(game, "game_mode", "campaign") == "score":
-        open_score_leaderboard(game)
+        open_score_leaderboard(game, getattr(game, "leaderboard_entries", []))
         return
 
     if result.get("final_clear"):
@@ -552,7 +572,8 @@ def end_game(game, clear):
     results.build_end_result(game, clear)
     if getattr(game, "game_mode", "campaign") == "score":
         entries, rank = scoreboard.submit_score(getattr(game, "score_nickname", ""), getattr(game, "score", 0), game)
-        game.leaderboard_entries = entries
+        set_leaderboard_cache(game, entries)
+        snapshot_score_leaderboard(game)
         game.leaderboard_last_rank = rank
         game.stage_result = dict(getattr(game, "end_result", {}))
         game.stage_result["unlock_text"] = "점수 등록 완료"
@@ -819,12 +840,9 @@ def get_balanced_boss_stats(game, stage):
     balance = get_score_balance_count(game)
     phase = get_stage_phase(game)
     phase_hp = stage.get("phase_boss_hp")
-    phase_shield = stage.get("phase_boss_shield")
     base_hp = phase_hp[min(phase, len(phase_hp) - 1)] if phase_hp else stage["boss_hp"]
-    base_shield = phase_shield[min(phase, len(phase_shield) - 1)] if phase_shield else stage["boss_shield"]
     hp = float(base_hp + balance * stage.get("boss_hp_per_score_level", 0))
-    shield = float(base_shield + balance * stage.get("boss_shield_per_score_level", 0))
-    return hp, shield
+    return hp, 0.0
 
 
 # 일반 적 1척을 만듭니다.
@@ -995,13 +1013,6 @@ def update_boss(game, dt):
     # 보스가 플레이 영역 밖으로 완전히 나가지 않도록 좌우를 제한합니다.
     rect.left = max(play_area.left + 12, rect.left)
     rect.right = min(play_area.right - 12, rect.right)
-
-    if game.stage_index == STAGE_MAX - 1 and game.boss["shield"] <= 0:
-        # 최종 보스는 보호막이 깨져도 일정 시간이 지나면 일부 재생됩니다.
-        game.boss["restoreTimer"] += dt
-        if game.boss["restoreTimer"] >= 8.0:
-            game.boss["shield"] = game.boss["maxShield"] * 0.45
-            game.boss["restoreTimer"] = 0
 
     if not stage.get("boss_can_shoot", True):
         return
