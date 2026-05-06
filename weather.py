@@ -30,6 +30,7 @@ MAX_WEATHER_EVENTS = 1
 WEATHER_SPAWN_INTERVAL_RANGE = (10.0, 15.0)
 WEATHER_BLINK_SECONDS = 1.0
 WEATHER_BLINKS_PER_SECOND = 8
+WEATHER_FADE_IN_SECONDS = 1.2
 
 WEATHER_TYPES = {
     # 각 날씨는 딕셔너리 하나로 정의합니다.
@@ -51,7 +52,7 @@ WEATHER_TYPES = {
         "fallback_color": (116, 169, 205),
     },
     "rain": {
-        "images": ("weather_rain1",),
+        "images": ("weather_fog1",),
         "area_mode": "full",
         "weight": 0.46,
         "size_range": ((250, 130), (390, 205)),
@@ -334,6 +335,11 @@ def get_effect_rect(event):
 def get_draw_alpha(event):
     config = WEATHER_TYPES[event["kind"]]
     alpha = event.get("alpha", config["alpha"])
+
+    if event["kind"] == "rain":
+        fade_in = min(1.0, max(0.0, event.get("age", 0.0) / WEATHER_FADE_IN_SECONDS))
+        fade_out = min(1.0, max(0.0, event["timer"] / WEATHER_BLINK_SECONDS))
+        return int(alpha * min(fade_in, fade_out))
 
     if event["timer"] > WEATHER_BLINK_SECONDS:
         return alpha

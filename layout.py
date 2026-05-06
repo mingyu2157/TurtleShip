@@ -154,6 +154,16 @@ def get_start_button_rect(game):
     return rect
 
 
+def get_login_button_rect(game):
+    start_rect = get_start_button_rect(game)
+    width = max(92, start_rect.width // 2)
+    height = max(30, start_rect.height // 2)
+    rect = pygame.Rect(0, 0, width, height)
+    rect.centerx = start_rect.centerx
+    rect.top = start_rect.bottom + max(10, start_rect.height // 6)
+    return rect
+
+
 # cover 방식으로 그려진 이미지 안의 원본 좌표 사각형을 현재 화면 좌표로 변환합니다.
 def get_cover_source_rect(game, image, source_rect):
     drawn_rect, scale = get_cover_rect(game, image)

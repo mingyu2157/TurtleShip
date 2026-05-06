@@ -20,13 +20,13 @@ import layout
 import obstacles
 import projectiles
 import ui
-import waves
 import weather
 from settings import RED, WHITE, YELLOW
 from stages import get_stage_display_name
 
 
 PROJECTILE_SHADOW_COLOR = (10, 4, 2, 86)
+WAVE_OVERLAY_ALPHA = 217
 PROJECTILE_SHADOW_OFFSETS = ((1, 1),)
 PROJECTILE_OUTLINE_OFFSETS = (
     (-1, 0),
@@ -122,10 +122,17 @@ def draw_game(game):
 
     if game.stage_banner_timer > 0:
         # stage_banner_timer가 남아 있는 동안 스테이지 이름을 잠깐 크게 보여줍니다.
-        ui.draw_text(game, get_stage_display_name(game), 36, WHITE, game.pad_width // 2, game.pad_height // 2 - 30, True, True)
+        ui.draw_toast(game, get_stage_display_name(game), game.pad_height // 2 - 30, 36, WHITE, 0.62)
 
     if game.message_timer > 0:
-        ui.draw_text(game, game.message_text, 30, YELLOW, game.pad_width // 2, int(game.pad_height * 0.72), True, True)
+        ui.draw_toast(game, game.message_text, int(game.pad_height * 0.72), 30, YELLOW, 0.74)
+
+    hit_flash = getattr(game, "hit_flash_timer", 0)
+    if hit_flash > 0:
+        alpha = int(min(120, 120 * (hit_flash / 0.18)))
+        flash_surf = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
+        flash_surf.fill((175, 28, 24, alpha))
+        game.screen.blit(flash_surf, (0, 0))
 
     # 부활 플래시: 화면 전체를 밝은 금빛으로 잠깐 물들입니다.
     revive_flash = getattr(game, "revive_flash_timer", 0)
@@ -134,7 +141,7 @@ def draw_game(game):
         flash_surf = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
         flash_surf.fill((255, 230, 80, alpha))
         game.screen.blit(flash_surf, (0, 0))
-        ui.draw_text(game, "부활!", 48, (255, 255, 255), game.pad_width // 2, game.pad_height // 2, True, True)
+        ui.draw_toast(game, "부활!", game.pad_height // 2, 48, (255, 255, 255), 0.42)
 
     if game.paused:
         ui.draw_pause_menu(game)
@@ -156,60 +163,31 @@ def draw_sea_background(game):
         pygame.draw.arc(game.screen, (52, 117, 150), (x, y, 80, 16), 0, math.pi, 1)
 
 
-# 실제 게임 공간 위에 반투명 파도 애니메이션을 덧그립니다.
-# pygame.time.get_ticks()로 현재 시간을 가져와서 매 프레임 파도 위치가 조금씩 바뀌게 합니다.
-# layout.get_play_area()를 사용하므로 배경 이미지의 테두리 장식 부분에는 파도가 그려지지 않습니다.
-# waves.py의 현재 파도 방향을 그대로 사용하므로, 화면의 파도와 배들이 밀리는 방향이 맞습니다.
+# 바다 배경 위에 해류 방향을 보여주는 파도 하이라이트 PNG를 반복해서 얹습니다.
 def draw_wave_overlay(game):
     play_area = layout.get_play_area(game)
-    if play_area.width <= 0 or play_area.height <= 0:
+    image = game.images.get("wave_overlay")
+    if image is None or play_area.width <= 0 or play_area.height <= 0:
         return
 
-    state = waves.get_wave_state(game)
-    # flow_x/flow_y는 파도가 흘러가는 방향, perp_x/perp_y는 그 방향에 수직인 방향입니다.
-    time = state["time"]
-    flow_x = state["unit_x"]
-    flow_y = state["unit_y"]
-    perp_x = state["perp_x"]
-    perp_y = state["perp_y"]
-    extent = int(math.hypot(play_area.width, play_area.height)) + 120
-    wave_layer = pygame.Surface((play_area.width, play_area.height), pygame.SRCALPHA)
+    tile_width = max(play_area.width, int(play_area.width * 1.18))
+    tile_height = max(play_area.height, int(tile_width * image.get_height() / max(1, image.get_width())))
+    tile = assets.get_scaled_image(game, image, (tile_width, tile_height)).copy()
+    tile.set_alpha(WAVE_OVERLAY_ALPHA)
 
-    wave_gap = max(34, play_area.height // 14)
-    wave_count = extent // wave_gap + 5
-    # scroll은 waves.py의 unit_x/unit_y와 같은 방향으로 증가합니다.
-    # 따라서 화면에 보이는 파도 흐름과 실제 배가 밀리는 방향이 서로 어긋나지 않습니다.
-    scroll = (time * state["speed"] * 0.48) % wave_gap
-    center_x = play_area.width / 2
-    center_y = play_area.height / 2
+    offset_x = int(getattr(game, "wave_overlay_x", 0.0)) % max(1, tile_width)
+    offset_y = int(getattr(game, "wave_overlay_y", 0.0)) % max(1, tile_height)
 
-    for i in range(wave_count):
-        # along은 파도선이 흐름 방향으로 얼마나 떨어져 있는지 나타냅니다.
-        along = -extent / 2 + i * wave_gap + scroll
-        phase = time * 1.05 + i * 0.54
-        wave_center_x = center_x + flow_x * along
-        wave_center_y = center_y + flow_y * along
-
-        bright_points = []
-        shadow_points = []
-        for side in range(-extent, extent + 1, 24):
-            # side 방향으로 긴 선을 만들고, sin으로 살짝 흔들어 자연스러운 물결을 만듭니다.
-            wiggle = math.sin(side * 0.021 + phase) * 5 + math.sin(side * 0.009 + phase * 1.5) * 3
-            x = wave_center_x + perp_x * side + flow_x * wiggle
-            y = wave_center_y + perp_y * side + flow_y * wiggle
-            bright_points.append((x, y))
-            shadow_points.append((x - flow_x * 8, y - flow_y * 8))
-
-        if len(shadow_points) > 1:
-            pygame.draw.lines(wave_layer, (4, 20, 42, 28), False, shadow_points, 2)
-        if len(bright_points) > 1:
-            pygame.draw.lines(wave_layer, (176, 233, 252, 62), False, bright_points, 2)
-
-        if i % 3 == 0 and len(bright_points) > 1:
-            foam_points = bright_points[::3]
-            pygame.draw.lines(wave_layer, (238, 252, 255, 34), False, foam_points, 1)
-
-    game.screen.blit(wave_layer, play_area.topleft)
+    old_clip = game.screen.get_clip()
+    game.screen.set_clip(play_area)
+    x = play_area.left + offset_x - tile_width
+    while x < play_area.right:
+        y = play_area.top + offset_y - tile_height
+        while y < play_area.bottom:
+            game.screen.blit(tile, (x, y))
+            y += tile_height
+        x += tile_width
+    game.screen.set_clip(old_clip)
 
 
 # 중앙 모바일 플레이 영역 밖의 좌우 공간을 살짝 어둡게 표시합니다.
@@ -233,17 +211,17 @@ def draw_side_reserve_areas(game):
 
 # 현재 스테이지 배경 이미지를 그립니다.
 # stageN.png가 있으면 그것을 쓰고, 없으면 기본 바다 배경에 스테이지 색을 살짝 입힙니다.
-# 마지막에는 항상 draw_wave_overlay()를 호출해서 바다가 찰랑이는 느낌을 더합니다.
+# 마지막에는 파도 하이라이트 오버레이를 얹어 바다가 찰랑이는 느낌을 더합니다.
 def draw_stage_background(game):
     image = assets.get_stage_image(game, "stage")
     if image:
         # 배경 이미지가 있으면 화면을 덮도록 확대/축소해서 그립니다.
         layout.draw_cover(game, image)
+        draw_wave_overlay(game)
         shade = pygame.Surface((game.pad_width, game.pad_height), pygame.SRCALPHA)
         shade.fill((0, 0, 0, 34))
         game.screen.blit(shade, (0, 0))
         draw_side_reserve_areas(game)
-        draw_wave_overlay(game)
         draw_stage_darkness(game)
         return
 
@@ -254,8 +232,8 @@ def draw_stage_background(game):
     color = stage["color"]
     tint.fill((color[0], color[1], color[2], 42))
     game.screen.blit(tint, (0, 0))
-    draw_side_reserve_areas(game)
     draw_wave_overlay(game)
+    draw_side_reserve_areas(game)
     draw_stage_darkness(game)
 
 
@@ -371,6 +349,10 @@ def draw_weather_event(game, event):
     alpha = weather.get_draw_alpha(event)
 
     if image:
+        if event["kind"] == "rain":
+            draw_full_fog_overlay(game, image, rect, alpha, event)
+            return
+
         # 날씨 이미지는 투명도만 자주 바뀌므로 크기 변환 결과는 캐시하고 alpha만 복사본에 적용합니다.
         scaled = assets.get_scaled_image(game, image, rect.size)
         scaled = scaled.copy()
@@ -382,6 +364,39 @@ def draw_weather_event(game, event):
     color = config["fallback_color"]
     fallback.fill((color[0], color[1], color[2], alpha))
     game.screen.blit(fallback, rect)
+
+
+def draw_full_fog_overlay(game, image, rect, alpha, event):
+    content_rect = image.get_bounding_rect()
+    if content_rect.width <= 0 or content_rect.height <= 0:
+        return
+
+    fog = image.subsurface(content_rect).copy()
+    width = max(rect.width, int(rect.width * 1.16))
+    height = max(rect.height // 3, int(width * fog.get_height() / max(1, fog.get_width())))
+    scaled = assets.get_scaled_image(game, fog, (width, height)).copy()
+    scaled.set_alpha(min(190, int(alpha * 1.35)))
+
+    fog_tint = pygame.Surface(rect.size, pygame.SRCALPHA)
+    fog_tint.fill((205, 224, 230, min(44, max(18, alpha // 3))))
+    game.screen.blit(fog_tint, rect)
+
+    age = event.get("age", 0.0)
+    row_gap = max(1, int(height * 0.46))
+    tile_width = max(1, width // 2)
+    fog_period = 13.1
+    x_scroll = int((age % fog_period) / fog_period * tile_width)
+    y = rect.top - height // 3
+    row = 0
+    while y < rect.bottom:
+        x = rect.left - tile_width + x_scroll
+        if row % 2:
+            x -= tile_width // 2
+        while x < rect.right:
+            game.screen.blit(scaled, (x, y))
+            x += tile_width
+        y += row_gap
+        row += 1
 
 
 # 미니보스를 그립니다.
@@ -503,8 +518,10 @@ def draw_hakikjin_ship(game, ship):
     image = game.images.get("skill_hakikjin_ship")
 
     if image:
-        scaled = assets.get_scaled_image(game, image, rect.size)
-        game.screen.blit(scaled, rect)
+        scale = min(rect.width / image.get_width(), rect.height / image.get_height())
+        draw_size = (max(1, int(image.get_width() * scale)), max(1, int(image.get_height() * scale)))
+        scaled = assets.get_scaled_image(game, image, draw_size)
+        game.screen.blit(scaled, scaled.get_rect(center=rect.center))
         return
 
     pygame.draw.rect(game.screen, (24, 39, 48), rect, border_radius=6)

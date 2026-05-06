@@ -37,6 +37,7 @@ import render
 import rewards
 import skills
 import ui
+import waves
 import weather
 from settings import DEFAULT_PAD_HEIGHT, DEFAULT_PAD_WIDTH, FPS
 from stages import STAGES
@@ -169,6 +170,8 @@ class Game:
         self.wave_speed_target = 0
         self.wave_change_timer = 0
         self.wave_last_time = None
+        self.wave_overlay_x = 0.0
+        self.wave_overlay_y = 0.0
 
         # 나중에 확장할 필살기 상태입니다.
         # 기능을 여러 파일에 나눠도 실제 현재 값은 game 객체 안에 모아둡니다.
@@ -186,6 +189,7 @@ class Game:
         self.last_stand_damage_cooldown = 0.0
         self.last_stand_revive_cooldown = 0.0
         self.last_stand_revive_penalty_timer = 0.0
+        self.hit_flash_timer = 0.0
         self.revive_flash_timer = 0.0
         # 현재 재생 중인 배경음악 종류입니다.
         # assets.py가 같은 음악을 반복해서 처음부터 틀지 않도록 기억하는 값입니다.
@@ -262,6 +266,8 @@ def updateGame(dt):
     game.stage_banner_timer = max(0, game.stage_banner_timer - dt)
     game.message_timer = max(0, game.message_timer - dt)
     game.shoot_cooldown = max(0, game.shoot_cooldown - dt)
+    game.hit_flash_timer = max(0, getattr(game, "hit_flash_timer", 0) - dt)
+    update_wave_overlay_offset(dt)
     if pygame.key.get_pressed()[pygame.K_SPACE]:
         combat.shoot_player_bullet(game)
 
@@ -300,6 +306,13 @@ def updateGame(dt):
             game.revive_flash_timer = 0.7
             return
         actors.end_game(game, False)
+
+
+def update_wave_overlay_offset(dt):
+    state = waves.get_wave_state(game)
+    visual_speed = 0.72
+    game.wave_overlay_x += state["x"] * dt * visual_speed
+    game.wave_overlay_y += state["y"] * dt * visual_speed
 
 
 # 실제 게임 루프입니다.

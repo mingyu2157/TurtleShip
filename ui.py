@@ -248,6 +248,43 @@ def draw_text(game, text, size, color, x, y, center=False, bold=False, font_gett
     return rect
 
 
+def draw_soft_focus_frame(game, rect, selected=False, hovered=False, radius=8):
+    if not selected and not hovered:
+        return
+
+    outer_rect = rect.inflate(18 if selected else 12, 18 if selected else 12)
+    glow = pygame.Surface(outer_rect.size, pygame.SRCALPHA)
+    pygame.draw.rect(glow, (255, 214, 94, 34 if hovered else 24), glow.get_rect(), border_radius=radius + 6)
+    game.screen.blit(glow, outer_rect)
+
+    fill = pygame.Surface(rect.size, pygame.SRCALPHA)
+    fill.fill((255, 221, 118, 28 if hovered else 18))
+    game.screen.blit(fill, rect)
+
+    border_color = (255, 228, 134) if hovered else (255, 207, 78)
+    pygame.draw.rect(game.screen, border_color, rect, 3 if selected else 2, border_radius=radius)
+    inner_rect = rect.inflate(-12, -12)
+    if inner_rect.width > 0 and inner_rect.height > 0:
+        pygame.draw.rect(game.screen, (135, 83, 22), inner_rect, 1, border_radius=max(3, radius - 3))
+
+
+def draw_toast(game, text, y, size=30, color=YELLOW, max_width_ratio=0.76):
+    if not text:
+        return
+
+    font = get_font(game, size, True)
+    max_width = int(game.pad_width * max_width_ratio)
+    text = trim_text_to_width(font, str(text), max_width)
+    image = font.render(text, True, color)
+    image_rect = image.get_rect(center=(game.pad_width // 2, y))
+    panel_rect = image_rect.inflate(42, 20)
+    panel = pygame.Surface(panel_rect.size, pygame.SRCALPHA)
+    pygame.draw.rect(panel, (10, 12, 14, 214), panel.get_rect(), border_radius=10)
+    game.screen.blit(panel, panel_rect)
+    pygame.draw.rect(game.screen, (220, 170, 78), panel_rect, 1, border_radius=10)
+    game.screen.blit(image, image_rect)
+
+
 # 긴 한글 문장을 지정한 너비 안에서 여러 줄로 나눕니다.
 # 먼저 띄어쓰기 단위로 자르고, 그래도 너무 길면 글자 단위로 한 번 더 나눕니다.
 def wrap_text(font, text, max_width):
@@ -568,11 +605,13 @@ def draw_menu(game, draw_sea_background):
         draw_text(game, "거북선 전쟁", 26, YELLOW, game.pad_width // 2, int(game.pad_height * 0.36), True, True)
 
     start_rect = layout.get_start_button_rect(game)
+    login_rect = layout.get_login_button_rect(game)
     mouse_pos = pygame.mouse.get_pos()
     if menu_image:
         draw_menu_baked_button_highlight(game, start_rect, True, start_rect.collidepoint(mouse_pos))
     else:
         draw_menu_mode_button(game, start_rect, "게임 시작", True, start_rect.collidepoint(mouse_pos))
+    draw_menu_login_button(game, login_rect, login_rect.collidepoint(mouse_pos), getattr(game, "menu_pressed_button", "") == "login")
 
 
 def draw_mode_select(game, draw_sea_background):
@@ -585,6 +624,10 @@ def draw_mode_select(game, draw_sea_background):
     mode_image = mode_images[selected_index] or game.images.get("mode_back")
     if mode_image:
         layout.draw_cover(game, mode_image)
+        _, buttons = layout.get_mode_select_layout(game)
+        mouse_pos = pygame.mouse.get_pos()
+        for index, rect in enumerate(buttons):
+            draw_soft_focus_frame(game, rect, selected_index == index, hovered=rect.collidepoint(mouse_pos), radius=10)
         return
 
     menu_image = game.images.get("main_menu")
@@ -647,6 +690,40 @@ def draw_menu_button_shape_glow(game, button_image, rect, hovered):
 
     base = (glow_rect.left + cover_rect.left, glow_rect.top + cover_rect.top)
     game.screen.blit(glow, base)
+
+
+def draw_menu_login_button(game, rect, hovered=False, pressed=False):
+    glow_alpha = 86 if hovered or pressed else 42
+    glow_rect = rect.inflate(max(10, rect.width // 10), max(8, rect.height // 4))
+    glow = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+    pygame.draw.rect(glow, (255, 184, 46, glow_alpha), glow.get_rect(), border_radius=8)
+    game.screen.blit(glow, glow_rect)
+
+    panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+    panel.fill((8, 9, 10, 246))
+    game.screen.blit(panel, rect)
+
+    outer = (246, 188, 76) if hovered or pressed else (213, 145, 43)
+    inner = (255, 229, 139) if hovered or pressed else (156, 96, 28)
+    pygame.draw.rect(game.screen, outer, rect, 2 if rect.height < 48 else 3, border_radius=7)
+    pygame.draw.rect(game.screen, inner, rect.inflate(-8, -8), 1, border_radius=5)
+
+    accent_w = max(12, rect.width // 9)
+    accent_h = max(5, rect.height // 7)
+    left = rect.left + max(8, rect.width // 14)
+    right = rect.right - max(8, rect.width // 14)
+    y = rect.centery
+    pygame.draw.line(game.screen, outer, (left, y), (left + accent_w, y), 1)
+    pygame.draw.line(game.screen, outer, (right - accent_w, y), (right, y), 1)
+    pygame.draw.circle(game.screen, outer, (left + accent_w + accent_h, y), max(2, accent_h // 2), 1)
+    pygame.draw.circle(game.screen, outer, (right - accent_w - accent_h, y), max(2, accent_h // 2), 1)
+
+    if hovered or pressed:
+        shine = pygame.Surface(rect.size, pygame.SRCALPHA)
+        shine.fill((255, 225, 145, 24 if hovered else 16))
+        game.screen.blit(shine, rect)
+
+    draw_text_fit_visual_center_in_rect(game, "로그인", max(18, int(rect.height * 0.52)), (255, 226, 151), rect, True, get_story_font, min_size=12)
 
 
 # 메인 메뉴의 버튼 하나를 그립니다.
@@ -801,6 +878,8 @@ def draw_account_form_fields(game, layout_info, include_cursor=True):
     focus_index = getattr(game, "account_focus_index", 0)
     cursor = "|" if include_cursor and pygame.time.get_ticks() // 450 % 2 == 0 else ""
     for index, (name, rect) in enumerate(layout_info.get("fields", [])):
+        if index == focus_index:
+            draw_soft_focus_frame(game, rect, selected=True, hovered=False, radius=8)
         text = form.get(name, "")
         if name == "password":
             text = "*" * len(text)
@@ -843,6 +922,12 @@ def draw_account_message(game, layout_info):
     color = (128, 238, 166) if getattr(game, "account_message_ok", False) else (255, 154, 126)
     rect = pygame.Rect(panel.left + panel.width // 4, panel.bottom - max(130, panel.height // 8), panel.width // 2, max(26, panel.height // 34))
     draw_text_fit_in_rect(game, message, max(14, rect.height - 2), color, rect, True, True, get_right_ui_font)
+
+
+def draw_account_button_feedback(game, layout_info):
+    mouse_pos = pygame.mouse.get_pos()
+    for rect in layout_info.get("buttons", {}).values():
+        draw_soft_focus_frame(game, rect, selected=False, hovered=rect.collidepoint(mouse_pos), radius=8)
 
 
 def draw_account_profile_image(game, rect):
@@ -1046,6 +1131,7 @@ def draw_account_login(game, draw_sea_background):
     layout_info = draw_account_panel(game, "account_login", draw_sea_background)
     draw_account_form_fields(game, layout_info)
     draw_account_message(game, layout_info)
+    draw_account_button_feedback(game, layout_info)
 
 
 def draw_account_signup(game, draw_sea_background):
@@ -1053,6 +1139,7 @@ def draw_account_signup(game, draw_sea_background):
     draw_account_profile_image(game, layout_info.get("profile"))
     draw_account_form_fields(game, layout_info)
     draw_account_message(game, layout_info)
+    draw_account_button_feedback(game, layout_info)
 
 
 def draw_account_mypage(game, draw_sea_background):
@@ -1075,6 +1162,7 @@ def draw_account_mypage(game, draw_sea_background):
             value_rect = rect.inflate(-max(22, rect.width // 24), -max(10, rect.height // 7))
             value_size = max(22, min(34, int(rect.height * 0.48)))
             draw_text_fit_visual_center_in_rect(game, value, value_size, (246, 218, 150), value_rect, True, get_right_ui_font)
+    draw_account_button_feedback(game, layout_info)
 
 
 def draw_account_edit(game, draw_sea_background):
@@ -1082,6 +1170,7 @@ def draw_account_edit(game, draw_sea_background):
     draw_account_profile_image(game, layout_info.get("profile"))
     draw_account_form_fields(game, layout_info)
     draw_account_message(game, layout_info)
+    draw_account_button_feedback(game, layout_info)
 
 
 # 플레이 화면 위에 올라오는 일시정지 메뉴입니다.
@@ -2059,6 +2148,8 @@ def draw_right_status_panel(game, right_area):
     if panel.width <= 0 or panel.height <= 0:
         return
 
+    game.screen.fill((5, 9, 17), panel)
+
     ui_image = game.images.get("right_ui_panel")
     if ui_image:
         drawn_rect = draw_right_ui_background(game, ui_image, panel)
@@ -2172,7 +2263,7 @@ def draw_skill_icon_section(game, drawn_rect, source_size, panel, fonts):
     slots = [scale_right_ui_rect(drawn_rect, source_size, source_rect, panel) for source_rect in RIGHT_UI_SKILL_SLOTS]
     skill_specs = [
         {
-            "key": "Q",
+            "key": "Z",
             "image": "skill_icon_q",
             "timer": getattr(game, "hakikjin_timer", 0),
             "duration": skills.HAKIKJIN_DURATION,
@@ -2182,7 +2273,7 @@ def draw_skill_icon_section(game, drawn_rect, source_size, panel, fonts):
             "color": YELLOW,
         },
         {
-            "key": "Z",
+            "key": "X",
             "image": "skill_icon_z",
             "timer": getattr(game, "tanker_guard_timer", 0),
             "duration": skills.TANKER_DURATION + getattr(game, "augment_guard_bonus", 0),
@@ -2192,7 +2283,7 @@ def draw_skill_icon_section(game, drawn_rect, source_size, panel, fonts):
             "color": BLUE,
         },
         {
-            "key": "X",
+            "key": "C",
             "image": "skill_icon_x",
             "timer": getattr(game, "healer_timer", 0),
             "duration": skills.HEALER_DURATION,
@@ -2225,6 +2316,7 @@ def draw_skill_icon_slot(game, rect, spec, fonts):
     pygame.draw.rect(game.screen, (255, 222, 126), icon_rect, max(1, icon_size // 40), border_radius=max(3, icon_size // 12))
     key_rect = pygame.Rect(icon_rect.left, icon_rect.top, max(22, icon_size // 3), max(18, icon_size // 4))
     draw_text_in_rect(game, spec["key"], fonts["tiny"], WHITE, key_rect, True, True, get_right_ui_font)
+    draw_skill_key_badge(game, icon_rect, spec["key"], fonts)
 
     if not spec["available"]:
         draw_skill_disabled_overlay(game, icon_rect, fonts)
@@ -2234,6 +2326,18 @@ def draw_skill_icon_slot(game, rect, spec, fonts):
         draw_skill_active_ring(game, icon_rect, spec["timer"], spec["duration"], spec["color"], fonts)
 
     game.screen.set_clip(old_clip)
+
+
+def draw_skill_key_badge(game, icon_rect, key, fonts):
+    badge_size = max(24, int(icon_rect.width * 0.34))
+    badge_rect = pygame.Rect(0, 0, badge_size, badge_size)
+    badge_rect.bottomright = (icon_rect.right - max(3, icon_rect.width // 28), icon_rect.bottom - max(3, icon_rect.height // 28))
+
+    badge = pygame.Surface(badge_rect.size, pygame.SRCALPHA)
+    pygame.draw.ellipse(badge, (10, 12, 16, 232), badge.get_rect())
+    pygame.draw.ellipse(badge, (255, 222, 126, 245), badge.get_rect(), max(2, badge_size // 15))
+    game.screen.blit(badge, badge_rect)
+    draw_text_fit_visual_center_in_rect(game, key, max(18, int(badge_size * 0.68)), (255, 238, 182), badge_rect, True, get_right_ui_font)
 
 
 def draw_skill_disabled_overlay(game, rect, fonts):
