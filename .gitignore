@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.tmp
+campaign_progress.json
+scoreboard.json
+game.env
