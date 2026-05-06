@@ -13,6 +13,7 @@
 #   3. unlock_stage_after_clear()는 스테이지를 깼을 때 다음 스테이지를 열어줍니다.
 import json
 
+import account_store
 from settings import BASE_DIR
 from stages import STAGE_MAX
 
@@ -31,7 +32,11 @@ DEFAULT_PROGRESS = {
 
 # 숫자가 너무 작거나 커지지 않게 안전한 범위로 잘라줍니다.
 def clamp(value, low, high):
-    return max(low, min(high, int(value)))
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = low
+    return max(low, min(high, number))
 
 
 # 저장 데이터가 올바른 형태인지 정리합니다.
@@ -68,18 +73,27 @@ def load_progress():
 # 현재 진행도를 campaign_progress.json에 저장합니다.
 def save_progress(progress):
     normalized = normalize_progress(progress)
-    with SAVE_PATH.open("w", encoding="utf-8") as file:
-        json.dump(normalized, file, ensure_ascii=False, indent=2)
+    tmp_path = SAVE_PATH.with_name(f"{SAVE_PATH.name}.tmp")
+    try:
+        SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with tmp_path.open("w", encoding="utf-8") as file:
+            json.dump(normalized, file, ensure_ascii=False, indent=2)
+        tmp_path.replace(SAVE_PATH)
+    except OSError:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
     return normalized
 
 
 # 저장된 진행도를 game 객체에 적용합니다.
 # UI와 입력 처리는 game.unlocked_stage_count 값을 보고 스테이지 잠금 여부를 판단합니다.
 def apply_progress_to_game(game):
-    progress = load_progress()
+    progress = account_store.load_current_user_progress(game) or load_progress()
     game.unlocked_stage_count = progress["unlocked_stage_count"]
     game.cleared_stage_count = progress["cleared_stage_count"]
-    game.stage_select_index = min(getattr(game, "stage_select_index", 0), game.unlocked_stage_count - 1)
+    game.stage_select_index = clamp(getattr(game, "stage_select_index", 0), 0, game.unlocked_stage_count - 1)
     return progress
 
 
@@ -119,5 +133,5 @@ def unlock_stage_after_clear(game, stage_index):
     )
     game.unlocked_stage_count = progress["unlocked_stage_count"]
     game.cleared_stage_count = progress["cleared_stage_count"]
+    account_store.save_current_user_progress(game, progress)
     return progress["unlocked_stage_count"] > old_unlocked
-

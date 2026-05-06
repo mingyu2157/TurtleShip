@@ -54,8 +54,20 @@ AUGMENT_CARD_IMAGE_NAMES = [
 ]
 
 # 모든 스테이지에서 공통으로 사용할 이미지 이름입니다.
+STAGE_SELECT_STATE_IMAGE_NAMES = [
+    "stage_select_u1_s1",
+    *[f"stage_select_u{unlocked}_s{selected}" for unlocked in range(2, 6) for selected in range(1, unlocked + 1)],
+    *[f"stage_select_complete_s{selected}" for selected in range(1, 6)],
+]
+
+
 COMMON_IMAGE_NAMES = [
     "main_menu",
+    # 모드 선택 화면:
+    #   mode_back.png는 뒤로 버튼 선택 상태, story_mode.png/com_mode.png는 각 모드 선택 상태입니다.
+    "mode_back",
+    "story_mode",
+    "com_mode",
     # menu_start_button.png:
     #   메인 메뉴에서 이순신 시뮬레이션 시작 버튼 이미지로 사용합니다.
     #   이미지 자체에 "게임 시작" 글자가 들어 있으면 ui.py가 별도 글자를 덮지 않습니다.
@@ -69,14 +81,13 @@ COMMON_IMAGE_NAMES = [
     #   스테이지 선택 화면 중앙 패널 장식 이미지가 필요할 때 사용할 수 있는 예비 칸입니다.
     #   지금은 없어도 동작하고, 나중에 UI 디자인 이미지를 주면 assets.py가 자동으로 읽습니다.
     "stage_select_panel",
-    # story_mode.png / com_mode.png / mode_back.png:
-    #   모드 선택 화면에서 포커스 상태별로 표시할 전체 배경 이미지입니다.
-    "story_mode",
-    "com_mode",
-    "mode_back",
     # 배경.png:
     #   스테이지 선택 화면 전용 배경 이미지입니다. stage_select_background 대신 우선 사용됩니다.
     "배경",
+    # stage_select_u3_s2.png:
+    #   진행도와 현재 선택 스테이지가 반영된 완성형 스테이지 선택 화면입니다.
+    #   있으면 개별 카드 조립 대신 이 이미지를 화면 전체에 사용합니다.
+    *STAGE_SELECT_STATE_IMAGE_NAMES,
     # 잠금_2.png ~ 잠금_5.png:
     #   해당 스테이지가 잠겼을 때 카드 자리에 표시되는 이미지입니다.
     *[f"잠금_{n}" for n in range(2, 6)],
@@ -107,6 +118,26 @@ COMMON_IMAGE_NAMES = [
     #   전투 중 왼쪽 사이드 영역에 표시하는 세로형 요약지 이미지입니다.
     #   현재 출전 직전 가로 일기에 나온 내용을 짧게 요약해서 보여줍니다.
     "story_summary_vertical",
+    # 전투 중 오른쪽 정보 UI와 Q/Z/X 스킬 아이콘입니다.
+    "right_ui_panel",
+    "hp_gauge",
+    "boss_hp_fill",
+    "boss_hp_stage1_phase1",
+    "boss_hp_stage1_phase2",
+    "boss_hp_stage2",
+    "boss_hp_stage3",
+    "boss_hp_stage4",
+    "boss_hp_stage5",
+    "skill_icon_q",
+    "skill_icon_z",
+    "skill_icon_x",
+    "leaderboard_background",
+    "leaderboard_background_vertical",
+    "account_profile_icon",
+    "account_login_panel",
+    "account_signup_panel",
+    "account_mypage_panel",
+    "account_edit_panel",
     # story_intro.png:
     #   도입 스토리 전용 이미지 슬롯입니다.
     #   지금 캠페인 흐름에서는 주로 스테이지별 스토리를 보지만, 도입부를 다시 쓸 때 바로 연결됩니다.
@@ -194,6 +225,8 @@ def stage_image_names(stage_max):
             f"boss_stage{stage_number}",
             f"bullet_stage{stage_number}",
             f"projectile_stage{stage_number}",
+            f"enemy_projectile_stage{stage_number}",
+            f"boss_projectile_stage{stage_number}",
         ]
         # story_stage1_page1.png ~ story_stage1_page9.png:
         #   한 스테이지 안에서 여러 편의 난중일기 이미지를 순서대로 넣을 수 있는 칸입니다.

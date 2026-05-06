@@ -60,7 +60,22 @@ def update_player_bullets(game, dt):
 
 # 적이나 보스가 쏘는 탄환 1개를 생성합니다.
 # split은 분열탄으로 몇 번 더 갈라질 수 있는지입니다.
-def make_enemy_projectile(game, x, y, vx, vy, radius, damage, split, color):
+def make_enemy_projectile(
+    game,
+    x,
+    y,
+    vx,
+    vy,
+    radius,
+    damage,
+    split,
+    color,
+    image_key=None,
+    image_padding=None,
+    outline_color=None,
+    rotate_to_velocity=False,
+    image_tip_angle=90.0,
+):
     # enemy_projectiles에는 일반 적 탄환과 보스 탄환을 같이 저장합니다.
     # split은 나중에 분열탄으로 갈라질 횟수입니다.
     game.enemy_projectiles.append(
@@ -77,6 +92,11 @@ def make_enemy_projectile(game, x, y, vx, vy, radius, damage, split, color):
             "age": 0.0,
             "splitDone": False,
             "color": color,
+            "image_key": image_key,
+            "image_padding": image_padding,
+            "outline_color": outline_color or color,
+            "rotate_to_velocity": rotate_to_velocity,
+            "image_tip_angle": image_tip_angle,
         }
     )
 
@@ -90,6 +110,7 @@ def make_boss_projectile(game, x_offset, aimed=False, angle_offset=0):
 
     # 보스 탄환은 보스 rect의 아래쪽에서 시작합니다.
     stage = game.current_stage()
+    stage_number = game.stage_index + 1
     rect = game.boss["rect"]
     start_x = rect.centerx + x_offset
     start_y = rect.bottom - 8
@@ -113,6 +134,9 @@ def make_boss_projectile(game, x_offset, aimed=False, angle_offset=0):
         12 + game.stage_index * 3,
         1 if stage["pattern"] in ("fan", "storm") else 0,
         stage["projectile_color"],
+        image_key=f"boss_projectile_stage{stage_number}",
+        image_padding=30 + game.stage_index * 2,
+        outline_color=stage["projectile_color"],
     )
 
 
@@ -155,6 +179,11 @@ def split_projectile(game, projectile):
             projectile["damage"] * 0.58,
             projectile["split"] - 1,
             projectile["color"],
+            image_key=projectile.get("image_key"),
+            image_padding=projectile.get("image_padding"),
+            outline_color=projectile.get("outline_color"),
+            rotate_to_velocity=projectile.get("rotate_to_velocity", False),
+            image_tip_angle=projectile.get("image_tip_angle", 90.0),
         )
 
 

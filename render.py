@@ -23,7 +23,17 @@ import ui
 import waves
 import weather
 from settings import RED, WHITE, YELLOW
-from stages import get_stage_boss_name, get_stage_display_name, get_stage_trait
+from stages import get_stage_display_name
+
+
+PROJECTILE_SHADOW_COLOR = (10, 4, 2, 86)
+PROJECTILE_SHADOW_OFFSETS = ((1, 1),)
+PROJECTILE_OUTLINE_OFFSETS = (
+    (-1, 0),
+    (1, 0),
+    (0, 1),
+    (0, -1),
+)
 
 
 # 현재 게임 상태에 맞는 화면을 그립니다.
@@ -37,6 +47,20 @@ def draw_screen(game):
         ui.draw_menu(game, draw_sea_background)
     elif game.game_state == "mode_select":
         ui.draw_mode_select(game, draw_sea_background)
+    elif game.game_state == "account_login":
+        ui.draw_account_login(game, draw_sea_background)
+    elif game.game_state == "account_signup":
+        ui.draw_account_signup(game, draw_sea_background)
+    elif game.game_state == "account_mypage":
+        ui.draw_account_mypage(game, draw_sea_background)
+    elif game.game_state == "account_edit":
+        ui.draw_account_edit(game, draw_sea_background)
+    elif game.game_state == "account_profile_crop":
+        ui.draw_account_profile_crop(game, draw_sea_background)
+    elif game.game_state == "score_name_input":
+        ui.draw_score_name_input(game, draw_sea_background)
+    elif game.game_state == "score_leaderboard":
+        ui.draw_score_leaderboard_start(game, draw_sea_background)
     elif game.game_state == "stage_select":
         ui.draw_stage_select(game, draw_sea_background)
     elif game.game_state == "story":
@@ -55,6 +79,11 @@ def draw_screen(game):
         ui.draw_end_screen(game, False, draw_sea_background)
     elif game.game_state == "clear":
         ui.draw_end_screen(game, True, draw_sea_background)
+    elif game.game_state == "leaderboard":
+        ui.draw_leaderboard(game, draw_sea_background)
+
+    if ui.should_draw_profile_button(game):
+        ui.draw_profile_button(game)
 
 
 # 실제 플레이 화면을 그립니다.
@@ -94,8 +123,6 @@ def draw_game(game):
     if game.stage_banner_timer > 0:
         # stage_banner_timer가 남아 있는 동안 스테이지 이름을 잠깐 크게 보여줍니다.
         ui.draw_text(game, get_stage_display_name(game), 36, WHITE, game.pad_width // 2, game.pad_height // 2 - 30, True, True)
-        boss_text = f"미니보스: {get_stage_boss_name(game)} / {get_stage_trait(game)}"
-        ui.draw_text(game, boss_text, 21, YELLOW, game.pad_width // 2, game.pad_height // 2 + 12, True)
 
     if game.message_timer > 0:
         ui.draw_text(game, game.message_text, 30, YELLOW, game.pad_width // 2, int(game.pad_height * 0.72), True, True)
@@ -358,7 +385,6 @@ def draw_weather_event(game, event):
 
 
 # 미니보스를 그립니다.
-# 보스 이름과 특징 문구도 같이 표시합니다.
 def draw_boss(game):
     stage = game.current_stage()
     rect = game.boss["rect"]
@@ -373,29 +399,101 @@ def draw_boss(game):
         pygame.draw.rect(game.screen, stage["color"], rect, 4, border_radius=10)
         pygame.draw.circle(game.screen, RED, (rect.centerx, rect.centery), min(rect.width, rect.height) // 4)
 
-    ui.draw_text(game, game.boss.get("name", get_stage_boss_name(game)), 22, WHITE, rect.centerx, rect.centery - 12, True, True)
-    ui.draw_text(game, game.boss.get("trait", get_stage_trait(game)), 16, YELLOW, rect.centerx, rect.centery + 18, True)
-
 
 # 적 또는 보스 탄환을 그립니다.
 # 적군 총알 이름은 화면에 표시하지 않고, 탄환 이미지만 보여줍니다.
 def draw_enemy_projectile(game, projectile):
-    image = assets.get_stage_image(game, "projectile")
+    image = get_enemy_projectile_image(game, projectile)
     rect = projectiles.get_circle_rect(projectile["x"], projectile["y"], projectile["radius"])
 
     if image:
-        # 1단계 화살 이미지는 실제 판정보다 조금 크게 그려야 화면에서 화살로 읽힙니다.
+        # 적탄 이미지는 실제 판정보다 조금 크게 그려야 무기 형태가 눈에 들어옵니다.
         # 충돌 판정은 projectile["radius"] 그대로라서 이미지가 커져도 난이도가 갑자기 올라가지 않습니다.
-        if game.stage_index == 0:
-            draw_rect = rect.inflate(34, 34)
-        else:
-            draw_rect = rect.inflate(12, 12)
-        # 적 탄환 이미지도 같은 크기가 많이 반복되므로 캐시를 사용합니다.
-        scaled = assets.get_scaled_image(game, image, draw_rect.size)
-        game.screen.blit(scaled, scaled.get_rect(center=rect.center))
+        padding = projectile.get("image_padding")
+        if padding is None:
+            padding = 34 if projectile.get("rotate_to_velocity") else 14
+        draw_rect = rect.inflate(padding, padding)
+        image = get_projectile_content_image(game, image)
+        scaled = scale_projectile_image(game, image, draw_rect.size)
+        if projectile.get("rotate_to_velocity"):
+            scaled = rotate_projectile_to_velocity(scaled, projectile, projectile.get("image_tip_angle", 90.0))
+        draw_outlined_enemy_projectile(game, scaled, rect.center, projectile.get("outline_color", projectile["color"]))
     else:
         pygame.draw.circle(game.screen, (77, 30, 42), rect.center, projectile["radius"])
         pygame.draw.circle(game.screen, projectile["color"], rect.center, projectile["radius"], 2)
+
+
+def get_enemy_projectile_image(game, projectile):
+    image_key = projectile.get("image_key")
+    if image_key:
+        image = game.images.get(image_key)
+        if image:
+            return image
+
+    return assets.get_stage_image(game, "projectile")
+
+
+def get_projectile_content_image(game, image):
+    cache = getattr(game, "projectile_content_cache", None)
+    if cache is None:
+        cache = {}
+        game.projectile_content_cache = cache
+
+    key = id(image)
+    if key in cache:
+        return cache[key]
+
+    content_rect = image.get_bounding_rect(min_alpha=24)
+    if content_rect.width <= 0 or content_rect.height <= 0:
+        cache[key] = image
+        return image
+
+    cropped = image.subsurface(content_rect).copy()
+    cache[key] = cropped
+    return cropped
+
+
+def scale_projectile_image(game, image, target_size):
+    target_width, target_height = target_size
+    scale = min(target_width / image.get_width(), target_height / image.get_height())
+    scaled_size = (
+        max(1, int(image.get_width() * scale)),
+        max(1, int(image.get_height() * scale)),
+    )
+    return assets.get_scaled_image(game, image, scaled_size)
+
+
+def draw_outlined_enemy_projectile(game, image, center, outline_color):
+    base_rect = image.get_rect(center=center)
+    silhouette = get_projectile_silhouette(image, get_projectile_outline_color(outline_color))
+    shadow = get_projectile_silhouette(image, PROJECTILE_SHADOW_COLOR)
+
+    for dx, dy in PROJECTILE_SHADOW_OFFSETS:
+        game.screen.blit(shadow, base_rect.move(dx, dy))
+    for dx, dy in PROJECTILE_OUTLINE_OFFSETS:
+        game.screen.blit(silhouette, base_rect.move(dx, dy))
+    game.screen.blit(image, base_rect)
+
+
+def get_projectile_outline_color(color):
+    if len(color) >= 3:
+        return (color[0], color[1], color[2], 112)
+    return (255, 220, 120, 112)
+
+
+def get_projectile_silhouette(image, color):
+    mask = pygame.mask.from_surface(image, 24)
+    return mask.to_surface(setcolor=color, unsetcolor=(0, 0, 0, 0)).convert_alpha()
+
+
+def rotate_projectile_to_velocity(image, projectile, image_tip_angle):
+    vx = projectile.get("vx", 0)
+    vy = projectile.get("vy", 0)
+    if vx == 0 and vy == 0:
+        return image
+
+    direction_angle = math.degrees(math.atan2(vy, vx))
+    return pygame.transform.rotozoom(image, image_tip_angle - direction_angle, 1.0)
 
 
 # 학익진 스킬로 잠깐 등장하는 12척의 전술선을 그립니다.

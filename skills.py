@@ -14,7 +14,6 @@
 #   try_use_*() 함수로 발동 조건을 보고,
 #   update_skills()와 update_hakikjin_ships()로 지속 효과를 보면 됩니다.
 import math
-import random
 
 import pygame
 
@@ -422,6 +421,8 @@ def try_use_last_stand(game):
 
     # 필생즉사: 체력 20% 이하에서 쿨타임이 없으면 발동합니다.
     if game.player.get("hp", 1) <= 0:
+        return False
+    if game.player.get("hp", max_hp) > max_hp * LAST_STAND_TRIGGER_RATIO:
         return False
     if getattr(game, "last_stand_damage_cooldown", 0) > 0:
         return False

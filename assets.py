@@ -34,6 +34,13 @@ AUDIO_SEARCH_DIRS = (AUDIO_DIR, BASE_DIR / "sound effect")
 # 영어 키 이름과 실제 파일 이름이 다를 수 있어 별칭 목록을 둡니다.
 # 예: typing 키는 typing.mp3 또는 타이핑.mp3를 모두 허용합니다.
 SOUND_NAME_ALIASES = {
+    "shoot": ("shoot", "대포1", "대포2", "총1", "총2", "연사1", "연사2", "화살"),
+    "hit": ("hit", "피격", "충돌"),
+    "destroy": ("destroy", "폭발음1", "폭발음2"),
+    "weather_lightning": ("weather_lightning", "천둥번개"),
+    "boss": ("boss", "보스1", "보스2", "보스3", "보스4", "보스5"),
+    "skill": ("skill", "연사1", "화살"),
+    "ultimate": ("ultimate", "대포2", "총2"),
     "typing": ("typing", "타이핑"),
 }
 
@@ -102,6 +109,18 @@ def find_asset_in_folders(folders, names, extensions):
     return None
 
 
+# 같은 이름을 여러 번 찾고 불러오지 않도록 순서를 유지한 채 중복을 제거합니다.
+def unique_names(names):
+    seen = set()
+    ordered = []
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        ordered.append(name)
+    return ordered
+
+
 # 게임 시작 시 이미지와 효과음을 한 번에 불러옵니다.
 # 불러온 이미지는 images 딕셔너리, 효과음은 sounds 딕셔너리에 저장됩니다.
 def load_assets():
@@ -110,7 +129,7 @@ def load_assets():
     audio_enabled = False
 
     # skins.py에서 사용할 수 있는 이미지 이름 목록을 가져와 전부 한 번씩 찾아봅니다.
-    image_names = COMMON_IMAGE_NAMES + ALLY_IMAGE_NAMES + SKILL_IMAGE_NAMES + stage_image_names(STAGE_MAX)
+    image_names = unique_names(COMMON_IMAGE_NAMES + ALLY_IMAGE_NAMES + SKILL_IMAGE_NAMES + stage_image_names(STAGE_MAX))
     for name in image_names:
         path = find_asset(IMAGE_DIR, [name], IMAGE_EXTENSIONS)
         if not path:
@@ -131,7 +150,8 @@ def load_assets():
         # 대포처럼 자주 나는 소리는 여러 채널을 돌려 써서 앞 소리를 덜 자릅니다.
         pygame.mixer.set_reserved(15)
         audio_enabled = True
-    except pygame.error:
+    except pygame.error as error:
+        print(f"오디오 초기화 실패: {error}")
         audio_enabled = False
 
     if not audio_enabled:
@@ -139,7 +159,7 @@ def load_assets():
         return images, sounds, audio_enabled
 
     # 효과음도 이미지와 같은 방식으로 이름 목록을 돌며 불러옵니다.
-    sound_names = COMMON_SOUND_NAMES + stage_sound_names(STAGE_MAX)
+    sound_names = unique_names(COMMON_SOUND_NAMES + stage_sound_names(STAGE_MAX))
     for name in sound_names:
         candidate_names = SOUND_NAME_ALIASES.get(name, (name,))
         path = find_asset_in_folders(AUDIO_SEARCH_DIRS, candidate_names, AUDIO_EXTENSIONS)
@@ -157,18 +177,18 @@ def load_assets():
 # 오디오 장치가 없거나 파일이 없으면 조용히 넘어가서 게임 실행을 방해하지 않습니다.
 def play_menu_music(game):
     # 대기화면 BGM
-    play_named_music(game, ["pagebgm"], "menu_bgm", 0.4)
+    play_named_music(game, ["pagebgm", "대기음악"], "menu_bgm", 0.4)
 
 
 def play_music(game):
     # 전투화면 BGM
-    play_named_music(game, ["bgm"], "battle_bgm", 0.4)
+    play_named_music(game, ["bgm", "배경음악"], "battle_bgm", 0.4)
 
 # 스테이지 선택 화면용 배경음악을 재생합니다.
 # assets/audio/stage_select_bgm.mp3 파일을 넣으면 자동으로 사용합니다.
 def play_stage_select_music(game):
     # stage_select_bgm이 가장 명확한 이름이고, campaign_bgm은 예비 별칭입니다.
-    play_named_music(game, ["stage_select_bgm", "campaign_bgm"], "stage_select_bgm", 0.36)
+    play_named_music(game, ["stage_select_bgm", "campaign_bgm", "pagebgm", "대기음악"], "stage_select_bgm", 0.36)
 
 
 # 난중일기/스토리 화면용 배경음악을 재생합니다.
@@ -182,6 +202,8 @@ def play_story_music(game):
             "story_intro_bgm",
             "story_bgm",
             "nanjung_bgm",
+            "pagebgm",
+            "대기음악",
         ]
         play_named_music(game, names, f"story_intro_bgm_{intro_page_number}", 0.38)
         return
@@ -201,6 +223,8 @@ def play_story_music(game):
         f"story_stage{stage_number}_bgm",
         "story_bgm",
         "nanjung_bgm",
+        "pagebgm",
+        "대기음악",
     ]
     play_named_music(game, names, f"story_bgm_{stage_number}_{phase_number}_{page_number}", 0.38)
 
@@ -211,11 +235,6 @@ def play_named_music(game, names, music_key, volume):
     if not game.audio_enabled:
         return
 
-    # 이미 같은 음악이 재생 중이면 처음부터 다시 틀지 않습니다.
-    # 이 조건이 없으면 화면을 다시 열 때 음악이 매번 끊겨 들릴 수 있습니다.
-    if getattr(game, "current_music_key", None) == music_key:
-        return
-
     # 여러 이름 후보 중 실제 존재하는 파일을 찾습니다.
     path = find_asset_in_folders(AUDIO_SEARCH_DIRS, names, AUDIO_EXTENSIONS)
     if not path:
@@ -224,10 +243,27 @@ def play_named_music(game, names, music_key, volume):
         return
 
     try:
+        path_key = str(path.resolve())
+    except OSError:
+        path_key = str(path)
+
+    # 이미 같은 파일이 재생 중이면 스토리 페이지 키가 달라져도 처음부터 다시 틀지 않습니다.
+    # 페이지별 전용 음악 파일이 실제로 다를 때만 자연스럽게 새 곡으로 넘어갑니다.
+    if getattr(game, "current_music_path", None) == path_key and pygame.mixer.music.get_busy():
+        game.current_music_key = music_key
+        return
+
+    # 파일 경로를 아직 저장하지 못한 오래된 상태에서도 같은 음악 키면 재시작을 피합니다.
+    if getattr(game, "current_music_key", None) == music_key and pygame.mixer.music.get_busy():
+        game.current_music_path = path_key
+        return
+
+    try:
         pygame.mixer.music.load(str(path))
         pygame.mixer.music.set_volume(volume)
         pygame.mixer.music.play(-1)
         game.current_music_key = music_key
+        game.current_music_path = path_key
     except pygame.error:
         print(f"배경음악을 재생하지 못했습니다: {path}")
 
@@ -240,6 +276,7 @@ def stop_music(game):
     try:
         pygame.mixer.music.stop()
         game.current_music_key = None
+        game.current_music_path = None
     except pygame.error:
         pass
 
@@ -339,7 +376,7 @@ def set_story_typing_sound_enabled(game, enabled):
         return
 
     if not getattr(game, "story_typing_sound_active", False) or not channel.get_busy():
-        sound.set_volume(0.26)
+        sound.set_volume(0.22)
         channel.play(sound, loops=-1)
         game.story_typing_sound_active = True
 
@@ -364,6 +401,17 @@ def get_stage_image(game, kind):
         return game.images.get(f"bullet_stage{stage_number}") or game.images.get("bullet")
     if kind == "projectile":
         return game.images.get(f"projectile_stage{stage_number}")
+    if kind == "enemy_projectile":
+        return game.images.get(f"enemy_projectile_stage{stage_number}") or game.images.get(f"projectile_stage{stage_number}")
+    if kind == "boss_projectile":
+        return game.images.get(f"boss_projectile_stage{stage_number}") or game.images.get(f"projectile_stage{stage_number}")
+    if kind == "boss_hp":
+        if stage_number == 1:
+            phase_number = getattr(game, "stage_phase", 0) + 1
+            return game.images.get(f"boss_hp_stage1_phase{phase_number}") or game.images.get("boss_hp_stage1_phase1")
+        return game.images.get(f"boss_hp_stage{stage_number}") or game.images.get("boss_hp_stage1_phase2")
+    if kind == "boss_hp_fill":
+        return game.images.get("boss_hp_fill")
 
     return None
 

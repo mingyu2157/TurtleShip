@@ -25,6 +25,7 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 import actors
+import account_store
 import assets
 import augments
 import campaign
@@ -92,6 +93,7 @@ class Game:
         self.stage_total_kills = 0
         self.kill_count = 0
         self.score = 0
+        self.stage_play_time = 0.0
         # current_stage_stats는 이번 스테이지 전투 기록입니다.
         self.current_stage_stats = {}
         # stage_result는 방금 클리어한 스테이지 결과 화면에 표시할 데이터입니다.
@@ -117,7 +119,28 @@ class Game:
         self.mode_select_index = 0
         self.stage_select_index = 0
         self.menu_select_index = 0
+        self.mode_select_index = 0
         self.pause_select_index = 0
+        self.score_nickname = ""
+        self.score_name_input = ""
+        self.leaderboard_entries = []
+        self.leaderboard_last_rank = None
+        self.account_user = None
+        self.account_previous_state = "menu"
+        self.account_form = {"login_id": "", "password": "", "nickname": ""}
+        self.account_focus_index = 0
+        self.account_message_text = ""
+        self.account_message_ok = False
+        self.account_profile_upload_bytes = None
+        self.account_profile_upload_mime = None
+        self.account_profile_upload_changed = False
+        self.account_crop_previous_state = "account_signup"
+        self.account_crop_path = ""
+        self.account_crop_surface = None
+        self.account_crop_source_size = (0, 0)
+        self.account_crop_box = None
+        self.account_crop_dragging = False
+        self.account_crop_drag_last = None
         self.hakikjin_unlocked = False
         self.shoot_cooldown = 0
         self.obstacle_spawn_timer = 0
@@ -167,6 +190,7 @@ class Game:
         # 현재 재생 중인 배경음악 종류입니다.
         # assets.py가 같은 음악을 반복해서 처음부터 틀지 않도록 기억하는 값입니다.
         self.current_music_key = None
+        self.current_music_path = None
 
     def current_stage(self):
         # stage_index는 0부터 시작합니다. 0은 1스테이지, 1은 2스테이지입니다.
@@ -222,6 +246,7 @@ def initGame():
 
     # 이미지/효과음은 게임 중 계속 쓰므로 시작할 때 한 번만 불러옵니다.
     game.images, game.sounds, game.audio_enabled = assets.load_assets()
+    account_store.ensure_schema()
     assets.play_menu_music(game)
     # 저장된 캠페인 진행도를 불러와서 스테이지 선택 화면에서 잠금 상태를 정확히 보여줍니다.
     campaign.apply_progress_to_game(game)
@@ -233,6 +258,7 @@ def initGame():
 def updateGame(dt):
     # dt는 지난 프레임부터 이번 프레임까지 걸린 시간(초)입니다.
     # 속도 * dt 방식으로 계산하면 컴퓨터가 빠르거나 느려도 움직임이 비슷합니다.
+    game.stage_play_time += dt
     game.stage_banner_timer = max(0, game.stage_banner_timer - dt)
     game.message_timer = max(0, game.message_timer - dt)
     game.shoot_cooldown = max(0, game.shoot_cooldown - dt)

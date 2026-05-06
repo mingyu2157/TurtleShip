@@ -1,8 +1,15 @@
 #!/bin/zsh
 cd "$(dirname "$0")"
 
-if [ ! -x "venv/bin/python" ]; then
-  echo "venv/bin/python을 찾을 수 없습니다."
+PYTHON_BIN=""
+if [ -x ".venv/bin/python" ]; then
+  PYTHON_BIN=".venv/bin/python"
+elif [ -x "venv/bin/python" ]; then
+  PYTHON_BIN="venv/bin/python"
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+  echo ".venv/bin/python 또는 venv/bin/python을 찾을 수 없습니다."
   echo "먼저 가상환경을 만들고 pygame을 설치하세요:"
   echo "  python3 -m venv venv"
   echo "  venv/bin/pip install -r requirements.txt"
@@ -13,7 +20,7 @@ fi
 echo "PyShooting 실행 중..."
 echo "로그 파일: $(pwd)/last_run.log"
 
-venv/bin/python main.py > last_run.log 2>&1
+"$PYTHON_BIN" main.py > last_run.log 2>&1
 status=$?
 
 if [ "$status" -ne 0 ]; then
