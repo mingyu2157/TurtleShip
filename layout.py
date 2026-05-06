@@ -183,7 +183,7 @@ def get_mode_select_layout(game):
         source_rects = (
             (330, 290, 520, 500),
             (830, 290, 520, 500),
-            (1215, 792, 420, 120),
+            (1210, 805, 365, 96),
         )
         screen_rect = pygame.Rect(0, 0, game.pad_width, game.pad_height)
         buttons = [get_cover_source_rect(game, mode_image, source_rect).clip(screen_rect) for source_rect in source_rects]
