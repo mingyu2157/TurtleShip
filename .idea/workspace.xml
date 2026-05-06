@@ -4,8 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4dbfde2e-669f-46e9-b0c6-60cfc6068294" name="변경" comment="mysql 연동 미완성">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+    <list default="true" id="4dbfde2e-669f-46e9-b0c6-60cfc6068294" name="변경" comment="미완성">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._대기음악.mp3" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._대포1.mp3" beforeDir="false" />
@@ -25,7 +24,6 @@
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._폭발음1.mp3" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._폭발음2.mp3" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/__MACOSX/sound effect/._화살.mp3" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/account_store.py" beforeDir="false" afterPath="$PROJECT_DIR$/account_store.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/기본능력/._image (16).png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/기본능력/._image (17).png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/기본능력/._image (18).png" beforeDir="false" />
@@ -43,15 +41,6 @@
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/증강카드/._image (7).png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/증강카드/._image (8).png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/assets/__MACOSX/증강카드/._image (9).png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage1_phase2.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage1_phase2.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage2.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage2.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage3.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage3.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage4.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage4.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/assets/images/boss_hp_stage5.png" beforeDir="false" afterPath="$PROJECT_DIR$/assets/images/boss_hp_stage5.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/input.py" beforeDir="false" afterPath="$PROJECT_DIR$/input.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/run_game.command" beforeDir="false" afterPath="$PROJECT_DIR$/run_game.command" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ui.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -152,7 +141,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778030659211</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="미완성">
+      <option name="closed" value="true" />
+      <created>1778038776296</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1778038776296</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -161,6 +158,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="05/05" />
     <MESSAGE value="mysql 연동 미완성" />
-    <option name="LAST_COMMIT_MESSAGE" value="mysql 연동 미완성" />
+    <MESSAGE value="미완성" />
+    <option name="LAST_COMMIT_MESSAGE" value="미완성" />
   </component>
 </project>

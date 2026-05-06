@@ -125,7 +125,17 @@ def get_boss_hp_bar_rect(game):
     combat_area = get_combat_area(game)
     margin_x = max(10, int(combat_area.width * 0.035))
     width = max(260, combat_area.width - margin_x * 2)
-    height = max(42, min(76, int(combat_area.height * 0.085)))
+    frame_image = assets.get_stage_image(game, "boss_hp")
+    aspect_ratio = 0.12
+    if frame_image and frame_image.get_width() > 0:
+        aspect_ratio = frame_image.get_height() / frame_image.get_width()
+
+    height = max(46, int(width * aspect_ratio))
+    max_height = max(72, int(combat_area.height * 0.22))
+    if height > max_height:
+        height = max_height
+        width = max(260, int(height / max(0.01, aspect_ratio)))
+
     rect = pygame.Rect(0, 0, width, height)
     rect.midtop = (combat_area.centerx, combat_area.top + max(6, int(combat_area.height * 0.012)))
     return rect
