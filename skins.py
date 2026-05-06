@@ -118,7 +118,7 @@ COMMON_IMAGE_NAMES = [
     #   전투 중 왼쪽 사이드 영역에 표시하는 세로형 요약지 이미지입니다.
     #   현재 출전 직전 가로 일기에 나온 내용을 짧게 요약해서 보여줍니다.
     "story_summary_vertical",
-    # 전투 중 오른쪽 정보 UI와 Q/Z/X 스킬 아이콘입니다.
+    # 전투 중 오른쪽 정보 UI와 Z/X/C 스킬 아이콘입니다.
     "right_ui_panel",
     "hp_gauge",
     "boss_hp_fill",
@@ -154,6 +154,7 @@ COMMON_IMAGE_NAMES = [
     #   나중에 UI 이미지를 주면 이 칸에 넣어 바로 교체할 수 있습니다.
     "stage_result_panel",
     "game_background",
+    "wave_overlay",
     "player",
     "bullet",
     "enemy",
@@ -161,6 +162,7 @@ COMMON_IMAGE_NAMES = [
     "obstacle_rock2",
     "weather_typhoon1",
     "weather_typhoon2",
+    "weather_fog1",
     "weather_rain1",
     "weather_lightning1",
     "mini_boss",

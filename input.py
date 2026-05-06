@@ -97,7 +97,9 @@ def handle_mouse_motion(game, pos):
         return
 
     if game.game_state == "menu":
-        set_menu_cursor(layout.get_start_button_rect(game).collidepoint(pos))
+        over_start = layout.get_start_button_rect(game).collidepoint(pos)
+        over_login = layout.get_login_button_rect(game).collidepoint(pos)
+        set_menu_cursor(over_start or over_login)
         return
 
     if game.game_state == "mode_select":
@@ -112,10 +114,13 @@ def handle_mouse_motion(game, pos):
         return
 
     if game.game_state == "stage_select":
+        over_clickable = False
         for stage_index, rect in enumerate(layout.get_stage_select_card_rects(game, STAGE_MAX)):
             if rect.collidepoint(pos) and campaign.is_stage_unlocked(game, stage_index):
                 game.stage_select_index = stage_index
+                over_clickable = True
                 break
+        set_menu_cursor(over_clickable)
         return
 
     if game.game_state == "score_leaderboard":
@@ -917,10 +922,6 @@ def handle_key_down(game, event):
         return
 
     # 스킬 키부터 검사합니다. 스킬을 쓴 프레임에는 일반 발사까지 같이 나가지 않게 return 합니다.
-    if skills.is_ultimate_key(event):
-        skills.try_use_ultimate(game)
-        return
-
     if skills.is_hakikjin_key(event):
         skills.try_use_hakikjin(game)
         return
@@ -967,9 +968,7 @@ def handle_mouse_down(game, pos):
         return
 
     if game.game_state == "menu":
-        if layout.get_start_button_rect(game).collidepoint(pos):
-            assets.play_stage_sound(game, "shoot", 0.45)
-            open_mode_select(game)
+        game.menu_pressed_button = get_menu_button_at(game, pos)
         return
 
     if game.game_state == "mode_select":
@@ -1070,6 +1069,29 @@ def handle_mouse_down(game, pos):
 def handle_mouse_up(game, pos):
     if game.game_state == "account_profile_crop":
         handle_account_crop_mouse_up(game, pos)
+        return
+
+    if game.game_state == "menu":
+        pressed_button = getattr(game, "menu_pressed_button", None)
+        game.menu_pressed_button = None
+        if pressed_button and pressed_button == get_menu_button_at(game, pos):
+            activate_menu_button(game, pressed_button)
+
+
+def get_menu_button_at(game, pos):
+    if layout.get_login_button_rect(game).collidepoint(pos):
+        return "login"
+    if layout.get_start_button_rect(game).collidepoint(pos):
+        return "start"
+    return None
+
+
+def activate_menu_button(game, button_name):
+    assets.play_stage_sound(game, "shoot", 0.45)
+    if button_name == "login":
+        open_account_login(game)
+    elif button_name == "start":
+        open_mode_select(game)
 
 
 def handle_mouse_wheel(game, direction):

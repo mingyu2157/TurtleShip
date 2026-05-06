@@ -26,8 +26,6 @@ import results
 # 필살기 기능은 아직 본격 도입 전이라 기본값은 꺼둡니다.
 ULTIMATE_ENABLED = False
 ULTIMATE_MAX = 100
-ULTIMATE_SCANCODES = {8, 224, 228}
-ULTIMATE_KEYS = {pygame.K_e, pygame.K_LCTRL, pygame.K_RCTRL}
 
 # 4단계 명량해전 생존 패시브 설정입니다.
 LAST_STAND_STAGE_INDEX = 3
@@ -63,24 +61,24 @@ LAST_STAND_CHOICES = [
     },
 ]
 
-# 학익진은 Q/ㅂ 키로 발동합니다.
-HAKIKJIN_SCANCODES = {20}
-HAKIKJIN_KEYS = {pygame.K_q}
+# 학익진은 Z/ㅋ 키로 발동합니다.
+HAKIKJIN_SCANCODES = {29}
+HAKIKJIN_KEYS = {pygame.K_z}
 HAKIKJIN_DURATION = 5.0
 HAKIKJIN_COOLDOWN = 30.0
 HAKIKJIN_SHIP_COUNT = 12
 HAKIKJIN_FIRE_INTERVAL = 0.22
-HAKIKJIN_SHIP_SIZE = (34, 92)
+HAKIKJIN_SHIP_SIZE = (92, 34)
 
-# 몸빵은 Z/ㅋ 키로 발동합니다.
-TANKER_SCANCODES = {29}
-TANKER_KEYS = {pygame.K_z}
+# 몸빵은 X/ㅌ 키로 발동합니다.
+TANKER_SCANCODES = {27}
+TANKER_KEYS = {pygame.K_x}
 TANKER_DURATION = 4.0
 TANKER_COOLDOWN = 20.0
 
-# 치유는 X/ㅌ 키로 발동합니다.
-HEALER_SCANCODES = {27}
-HEALER_KEYS = {pygame.K_x}
+# 치유는 C/ㅊ 키로 발동합니다.
+HEALER_SCANCODES = {6}
+HEALER_KEYS = {pygame.K_c}
 HEALER_DURATION = 5.0
 HEALER_COOLDOWN = 20.0
 HEALER_HEAL_PER_SECOND = 18.0
@@ -143,18 +141,13 @@ def is_healer_key(event):
     )
 
 
-# 키보드 이벤트가 필살기 키인지 확인합니다.
-def is_ultimate_key(event):
-    return event.key in ULTIMATE_KEYS or getattr(event, "scancode", None) in ULTIMATE_SCANCODES
-
-
 # 학익진이 현재 판 증강으로 해금되어 있는지 확인합니다.
 def is_hakikjin_unlocked(game):
     # 학익진은 이제 캠페인 진행도 저장이 아니라 "학익진 전술" 증강을 골랐을 때만 켜집니다.
     return getattr(game, "hakikjin_unlocked", False)
 
 
-# Q/ㅂ를 눌렀을 때 학익진을 발동합니다.
+# Z/ㅋ를 눌렀을 때 학익진을 발동합니다.
 def try_use_hakikjin(game):
     if is_stage_handicap_active(game):
         show_stage_handicap_message(game)
@@ -180,7 +173,7 @@ def try_use_hakikjin(game):
     return True
 
 
-# Z/ㅋ를 눌렀을 때 몸빵 방패선을 발동합니다.
+# X/ㅌ를 눌렀을 때 몸빵 방패선을 발동합니다.
 def try_use_tanker_guard(game):
     if is_stage_handicap_active(game):
         show_stage_handicap_message(game)
@@ -206,7 +199,7 @@ def try_use_tanker_guard(game):
     return True
 
 
-# X/ㅌ를 눌렀을 때 치유를 발동합니다.
+# C/ㅊ를 눌렀을 때 치유를 발동합니다.
 def try_use_healer(game):
     if is_stage_handicap_active(game):
         show_stage_handicap_message(game)
@@ -285,15 +278,48 @@ def create_hakikjin_ships(game):
 
 # 둥근 학익진 위치를 계산합니다.
 def get_hakikjin_position(area, index, count):
-    ratio = index / max(1, count - 1)
-    angle = math.radians(165 + (15 - 165) * ratio)
     radius_x = area.width * 0.46
     radius_y = area.height * 0.42
     center_x = area.centerx
     center_y = area.top + area.height * 0.34
+    angle = get_even_hakikjin_angle(index, count, radius_x, radius_y)
     x = center_x + math.cos(angle) * radius_x
     y = center_y + math.sin(angle) * radius_y
     return x, y
+
+
+def get_even_hakikjin_angle(index, count, radius_x, radius_y):
+    if count <= 1:
+        return math.radians(90)
+
+    start = math.radians(165)
+    end = math.radians(15)
+    samples = 160
+    points = []
+    distances = [0.0]
+
+    previous = None
+    for sample_index in range(samples + 1):
+        ratio = sample_index / samples
+        angle = start + (end - start) * ratio
+        point = (math.cos(angle) * radius_x, math.sin(angle) * radius_y)
+        points.append((angle, point))
+        if previous is not None:
+            distances.append(distances[-1] + math.dist(previous, point))
+        previous = point
+
+    target = distances[-1] * index / (count - 1)
+    for sample_index in range(1, len(distances)):
+        if distances[sample_index] < target:
+            continue
+        before_distance = distances[sample_index - 1]
+        after_distance = distances[sample_index]
+        local_ratio = 0 if after_distance == before_distance else (target - before_distance) / (after_distance - before_distance)
+        before_angle = points[sample_index - 1][0]
+        after_angle = points[sample_index][0]
+        return before_angle + (after_angle - before_angle) * local_ratio
+
+    return end
 
 
 # 학익진 진형선들이 자동으로 사격하게 합니다.

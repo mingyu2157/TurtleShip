@@ -38,6 +38,7 @@ import render
 import rewards
 import skills
 import ui
+import waves
 import weather
 from settings import DEFAULT_PAD_HEIGHT, DEFAULT_PAD_WIDTH, FPS
 from stages import STAGES
@@ -85,7 +86,7 @@ class Game:
         self.scaled_image_cache = {}
         self.audio_enabled = False
 
-        # 현재 게임 상태입니다. menu, stage_select, story, play, gameover, clear 같은 문자열로 구분합니다.
+        # 현재 게임 상태입니다. menu, mode_select, stage_select, story, play, gameover, clear 같은 문자열로 구분합니다.
         # stage_select는 캠페인 스테이지를 고르는 화면이고, story는 해전 브리핑 화면입니다.
         # stage_result는 스테이지 클리어 후 점수/피격/스킬 사용량을 보여주는 결과 화면입니다.
         # render.py와 input.py는 이 값을 보고 "어떤 화면을 그릴지", "키가 무슨 의미인지" 결정합니다.
@@ -138,6 +139,7 @@ class Game:
         # cleared_stage_count는 이미 클리어한 스테이지 개수입니다.
         self.unlocked_stage_count = 1
         self.cleared_stage_count = 0
+        self.mode_select_index = 0
         self.stage_select_index = 0
         self.menu_select_index = 0
         self.mode_select_index = 0
@@ -191,6 +193,8 @@ class Game:
         self.wave_speed_target = 0
         self.wave_change_timer = 0
         self.wave_last_time = None
+        self.wave_overlay_x = 0.0
+        self.wave_overlay_y = 0.0
 
         # 나중에 확장할 필살기 상태입니다.
         # 기능을 여러 파일에 나눠도 실제 현재 값은 game 객체 안에 모아둡니다.
@@ -208,6 +212,7 @@ class Game:
         self.last_stand_damage_cooldown = 0.0
         self.last_stand_revive_cooldown = 0.0
         self.last_stand_revive_penalty_timer = 0.0
+        self.hit_flash_timer = 0.0
         self.revive_flash_timer = 0.0
         # 현재 재생 중인 배경음악 종류입니다.
         # assets.py가 같은 음악을 반복해서 처음부터 틀지 않도록 기억하는 값입니다.
@@ -285,6 +290,8 @@ def updateGame(dt):
     game.stage_banner_timer = max(0, game.stage_banner_timer - dt)
     game.message_timer = max(0, game.message_timer - dt)
     game.shoot_cooldown = max(0, game.shoot_cooldown - dt)
+    game.hit_flash_timer = max(0, getattr(game, "hit_flash_timer", 0) - dt)
+    update_wave_overlay_offset(dt)
     if pygame.key.get_pressed()[pygame.K_SPACE]:
         combat.shoot_player_bullet(game)
 
@@ -323,6 +330,13 @@ def updateGame(dt):
             game.revive_flash_timer = 0.7
             return
         actors.end_game(game, False)
+
+
+def update_wave_overlay_offset(dt):
+    state = waves.get_wave_state(game)
+    visual_speed = 0.72
+    game.wave_overlay_x += state["x"] * dt * visual_speed
+    game.wave_overlay_y += state["y"] * dt * visual_speed
 
 
 # 실제 게임 루프입니다.

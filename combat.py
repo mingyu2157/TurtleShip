@@ -90,7 +90,7 @@ def shoot_player_bullet(game):
     results.record_shot(game)
 
     # 장전 훈련 증강이 있으면 다음 발사까지 기다리는 시간이 짧아집니다.
-    base_cooldown = 0.65
+    base_cooldown = 0.4
     total_reload_bonus = getattr(game, "augment_reload_bonus", 0) + getattr(game, "augment_perma_reload_speed_bonus", 0)
     game.shoot_cooldown = max(0.08, base_cooldown * (1 - min(0.8, total_reload_bonus)))
     assets.play_stage_sound(game, "shoot", 0.5)
@@ -267,4 +267,6 @@ def damage_player(game, amount):
     actual_damage = before_hp - game.player["hp"]
     # 결과 화면에 보여줄 피격 횟수와 받은 피해량을 기록합니다.
     results.record_player_hit(game, actual_damage)
-    assets.play_stage_sound(game, "hit", 0.65)
+    if actual_damage > 0:
+        game.hit_flash_timer = 0.18
+        assets.play_stage_sound(game, "hit", 0.65)
