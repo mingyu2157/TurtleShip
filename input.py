@@ -29,6 +29,11 @@ from settings import MIN_PAD_HEIGHT, MIN_PAD_WIDTH
 from stages import STAGE_MAX
 
 
+TEXT_INPUT_STATES = {"score_name_input", "account_login", "account_signup", "account_edit"}
+MODE_SELECT_MOUSE_GUARD_MS = 260
+MOUSE_TRANSITION_GUARD_MS = 420
+
+
 # pygame 이벤트 1개를 받아 종류에 맞게 처리합니다.
 # runGame()에서 매 프레임마다 모든 이벤트를 이 함수로 넘깁니다.
 def handle_event(game, event):
@@ -49,26 +54,37 @@ def handle_event(game, event):
 
     if event.type == pygame.TEXTINPUT:
         handle_text_input(game, event.text)
+        sync_text_input_state(game)
+        return
+
+    if event.type == pygame.TEXTEDITING:
+        game.text_editing_text = event.text
+        sync_text_input_state(game)
         return
 
     if event.type == pygame.KEYDOWN:
         handle_key_down(game, event)
+        sync_text_input_state(game)
         return
 
     if event.type == pygame.KEYUP:
         handle_key_up(game, event)
+        sync_text_input_state(game)
         return
 
     if event.type == pygame.MOUSEMOTION:
         handle_mouse_motion(game, event.pos)
+        sync_text_input_state(game)
         return
 
     if event.type == pygame.MOUSEWHEEL:
         handle_mouse_wheel(game, event.y)
+        sync_text_input_state(game)
         return
 
     if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
         handle_mouse_up(game, event.pos)
+        sync_text_input_state(game)
         return
 
     if event.type == pygame.MOUSEBUTTONDOWN:
@@ -76,6 +92,31 @@ def handle_event(game, event):
             handle_mouse_down(game, event.pos)
         elif event.button in (4, 5):
             handle_mouse_wheel(game, 1 if event.button == 4 else -1)
+        sync_text_input_state(game)
+
+
+def sync_text_input_state(game):
+    should_enable = getattr(game, "game_state", "") in TEXT_INPUT_STATES
+    if getattr(game, "text_input_active", False) == should_enable:
+        return
+
+    try:
+        if should_enable:
+            pygame.key.start_text_input()
+        else:
+            pygame.key.stop_text_input()
+            game.text_editing_text = ""
+    except pygame.error:
+        return
+    game.text_input_active = should_enable
+
+
+def guard_mouse_after_transition(game, duration_ms=MOUSE_TRANSITION_GUARD_MS):
+    game.mouse_input_guard_until = pygame.time.get_ticks() + duration_ms
+
+
+def is_mouse_transition_guard_active(game):
+    return pygame.time.get_ticks() < getattr(game, "mouse_input_guard_until", 0)
 
 
 # 마우스가 움직일 때 메뉴/선택 화면의 포커스 인덱스를 갱신합니다.
@@ -99,6 +140,10 @@ def handle_mouse_motion(game, pos):
     if game.game_state == "menu":
         over_start = layout.get_start_button_rect(game).collidepoint(pos)
         over_login = layout.get_login_button_rect(game).collidepoint(pos)
+        if over_start:
+            game.menu_select_index = 0
+        elif over_login:
+            game.menu_select_index = 1
         set_menu_cursor(over_start or over_login)
         return
 
@@ -191,6 +236,8 @@ def activate_stage_selection(game, stage_index):
 def open_mode_select(game):
     game.game_state = "mode_select"
     game.mode_select_index = 0
+    game.mode_select_ignore_mouse_until = pygame.time.get_ticks() + MODE_SELECT_MOUSE_GUARD_MS
+    guard_mouse_after_transition(game)
     game.message_text = ""
     game.message_timer = 0
     assets.play_menu_music(game)
@@ -206,6 +253,7 @@ def activate_mode_selection(game, index):
     else:
         game.game_state = "menu"
         assets.play_menu_music(game)
+    guard_mouse_after_transition(game)
 
 
 def handle_text_input(game, text):
@@ -216,11 +264,22 @@ def handle_text_input(game, text):
     if game.game_state != "score_name_input":
         return
 
+    last_text = getattr(game, "score_last_key_text", "")
+    last_ms = getattr(game, "score_last_key_text_ms", 0)
+    if text and text == last_text and pygame.time.get_ticks() - last_ms < 80:
+        game.score_last_key_text = ""
+        return
+
+    append_score_name_text(game, text)
+    game.text_editing_text = ""
+
+
+def append_score_name_text(game, text):
     if not text:
         return
 
     current = getattr(game, "score_name_input", "")
-    for char in text:
+    for char in str(text):
         if char in "\r\n\t":
             continue
         if len(current) >= scoreboard.MAX_NICKNAME_LENGTH:
@@ -678,9 +737,12 @@ def handle_key_down(game, event):
         return
 
     if game.game_state == "menu":
+        current_index = getattr(game, "menu_select_index", 0)
+        if event.key in (pygame.K_UP, pygame.K_w, pygame.K_DOWN, pygame.K_s):
+            game.menu_select_index = 1 if current_index == 0 else 0
+            return
         if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-            assets.play_stage_sound(game, "shoot", 0.45)
-            open_mode_select(game)
+            activate_menu_button(game, "login" if getattr(game, "menu_select_index", 0) == 1 else "start")
             return
         if event.key == pygame.K_ESCAPE:
             pygame.quit()
@@ -722,10 +784,17 @@ def handle_key_down(game, event):
             return
         if event.key == pygame.K_BACKSPACE:
             game.score_name_input = getattr(game, "score_name_input", "")[:-1]
+            game.text_editing_text = ""
             return
         if event.key == pygame.K_RETURN:
             assets.play_stage_sound(game, "shoot", 0.45)
             actors.confirm_score_name(game)
+            return
+        text = getattr(event, "unicode", "")
+        if text and text.isprintable():
+            append_score_name_text(game, text)
+            game.score_last_key_text = text
+            game.score_last_key_text_ms = pygame.time.get_ticks()
             return
         return
 
@@ -916,12 +985,16 @@ def handle_mouse_down(game, pos):
         handle_account_crop_mouse_down(game, pos)
         return
 
+    if game.game_state != "play" and is_mouse_transition_guard_active(game):
+        return
+
     if ui.should_draw_profile_button(game) and ui.get_profile_button_rect(game).collidepoint(pos):
         assets.play_stage_sound(game, "shoot", 0.45)
         if account_store.current_user(game):
             open_account_mypage(game)
         else:
             open_account_login(game)
+        guard_mouse_after_transition(game)
         return
 
     if game.game_state in ("account_login", "account_signup", "account_mypage", "account_edit"):
@@ -929,10 +1002,15 @@ def handle_mouse_down(game, pos):
         return
 
     if game.game_state == "menu":
-        game.menu_pressed_button = get_menu_button_at(game, pos)
+        pressed_button = get_menu_button_at(game, pos)
+        game.menu_pressed_button = pressed_button
+        if pressed_button:
+            activate_menu_button(game, pressed_button)
         return
 
     if game.game_state == "mode_select":
+        if pygame.time.get_ticks() < getattr(game, "mode_select_ignore_mouse_until", 0):
+            return
         _, buttons = layout.get_mode_select_layout(game)
         for index, rect in enumerate(buttons):
             if rect.collidepoint(pos):
@@ -1033,10 +1111,7 @@ def handle_mouse_up(game, pos):
         return
 
     if game.game_state == "menu":
-        pressed_button = getattr(game, "menu_pressed_button", None)
         game.menu_pressed_button = None
-        if pressed_button and pressed_button == get_menu_button_at(game, pos):
-            activate_menu_button(game, pressed_button)
 
 
 def get_menu_button_at(game, pos):
@@ -1053,6 +1128,7 @@ def activate_menu_button(game, button_name):
         open_account_login(game)
     elif button_name == "start":
         open_mode_select(game)
+    guard_mouse_after_transition(game)
 
 
 def handle_mouse_wheel(game, direction):

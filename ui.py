@@ -607,11 +607,17 @@ def draw_menu(game, draw_sea_background):
     start_rect = layout.get_start_button_rect(game)
     login_rect = layout.get_login_button_rect(game)
     mouse_pos = pygame.mouse.get_pos()
+    selected_index = getattr(game, "menu_select_index", 0)
     if menu_image:
-        draw_menu_baked_button_highlight(game, start_rect, True, start_rect.collidepoint(mouse_pos))
+        draw_menu_baked_button_highlight(game, start_rect, selected_index == 0, start_rect.collidepoint(mouse_pos))
     else:
-        draw_menu_mode_button(game, start_rect, "게임 시작", True, start_rect.collidepoint(mouse_pos))
-    draw_menu_login_button(game, login_rect, login_rect.collidepoint(mouse_pos), getattr(game, "menu_pressed_button", "") == "login")
+        draw_menu_mode_button(game, start_rect, "게임 시작", selected_index == 0, start_rect.collidepoint(mouse_pos))
+    draw_menu_login_button(
+        game,
+        login_rect,
+        login_rect.collidepoint(mouse_pos),
+        selected_index == 1 or getattr(game, "menu_pressed_button", "") == "login",
+    )
 
 
 def draw_mode_select(game, draw_sea_background):
@@ -778,9 +784,11 @@ def draw_score_name_input(game, draw_sea_background):
     pygame.draw.rect(game.screen, (72, 45, 18), input_rect, 2, border_radius=6)
 
     nickname = getattr(game, "score_name_input", "")
+    composing = getattr(game, "text_editing_text", "") if game.game_state == "score_name_input" else ""
     cursor = "|" if pygame.time.get_ticks() // 450 % 2 == 0 else ""
-    text = f"{nickname}{cursor}" if nickname else f"닉네임{cursor}"
-    color = DIARY_INK if nickname else (108, 86, 60)
+    display_name = f"{nickname}{composing}"
+    text = f"{display_name}{cursor}" if display_name else f"닉네임{cursor}"
+    color = DIARY_INK if display_name else (108, 86, 60)
     draw_text_in_rect(game, text, 30, color, input_rect.inflate(-24, 0), False, True)
 
     draw_text(game, "Enter", 18, (255, 224, 150), panel.centerx - 42, panel.bottom - 46, True, True)
