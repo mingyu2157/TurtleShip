@@ -934,8 +934,10 @@ def draw_account_message(game, layout_info):
 
 def draw_account_button_feedback(game, layout_info):
     mouse_pos = pygame.mouse.get_pos()
-    for rect in layout_info.get("buttons", {}).values():
-        draw_soft_focus_frame(game, rect, selected=False, hovered=rect.collidepoint(mouse_pos), radius=8)
+    fields_count = len(layout_info.get("fields", []))
+    button_focus_index = getattr(game, "account_focus_index", 0) - fields_count
+    for index, rect in enumerate(layout_info.get("buttons", {}).values()):
+        draw_soft_focus_frame(game, rect, selected=index == button_focus_index, hovered=rect.collidepoint(mouse_pos), radius=8)
 
 
 def draw_account_profile_image(game, rect):

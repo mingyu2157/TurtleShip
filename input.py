@@ -330,6 +330,7 @@ def open_account_signup(game):
 
 def open_account_mypage(game):
     remember_account_previous_state(game)
+    game.account_focus_index = 0
     game.account_message_text = ""
     game.account_message_ok = False
     game.game_state = "account_mypage"
@@ -378,7 +379,10 @@ def handle_account_text_input(game, text):
     fields = account_field_names(game)
     if not fields:
         return
-    field = fields[max(0, min(getattr(game, "account_focus_index", 0), len(fields) - 1))]
+    focus_index = getattr(game, "account_focus_index", 0)
+    if focus_index >= len(fields):
+        return
+    field = fields[max(0, min(focus_index, len(fields) - 1))]
     value = getattr(game, "account_form", {}).get(field, "")
     max_length = account_store.MAX_NICKNAME_LENGTH if field == "nickname" else account_store.MAX_LOGIN_ID_LENGTH
     if field == "password":
@@ -393,10 +397,43 @@ def handle_account_text_input(game, text):
 
 
 def move_account_focus(game, direction):
-    fields = account_field_names(game)
-    if not fields:
+    target_count = get_account_focus_count(game)
+    if target_count <= 0:
         return
-    game.account_focus_index = (getattr(game, "account_focus_index", 0) + direction) % len(fields)
+    game.account_focus_index = (getattr(game, "account_focus_index", 0) + direction) % target_count
+
+
+def get_account_button_names(game):
+    layout_info = ui.get_account_layout(game, game.game_state)
+    return tuple(layout_info.get("buttons", {}).keys())
+
+
+def get_account_focus_count(game):
+    return len(account_field_names(game)) + len(get_account_button_names(game))
+
+
+def get_account_focused_field(game):
+    fields = account_field_names(game)
+    focus_index = getattr(game, "account_focus_index", 0)
+    if 0 <= focus_index < len(fields):
+        return fields[focus_index]
+    return None
+
+
+def get_account_focused_button(game):
+    fields = account_field_names(game)
+    focus_index = getattr(game, "account_focus_index", 0)
+    button_index = focus_index - len(fields)
+    buttons = get_account_button_names(game)
+    if 0 <= button_index < len(buttons):
+        return buttons[button_index]
+    return None
+
+
+def focus_account_button(game, button_name):
+    buttons = get_account_button_names(game)
+    if button_name in buttons:
+        game.account_focus_index = len(account_field_names(game)) + buttons.index(button_name)
 
 
 def submit_account_login(game):
@@ -690,21 +727,51 @@ def handle_account_key_down(game, event):
         move_account_focus(game, -1)
         return
     if event.key == pygame.K_BACKSPACE:
-        fields = account_field_names(game)
-        if fields:
-            field = fields[max(0, min(getattr(game, "account_focus_index", 0), len(fields) - 1))]
+        field = get_account_focused_field(game)
+        if field:
             game.account_form[field] = getattr(game, "account_form", {}).get(field, "")[:-1]
         return
     if event.key == pygame.K_RETURN:
-        if game.game_state == "account_login":
-            submit_account_login(game)
-        elif game.game_state == "account_signup":
-            submit_account_signup(game)
-        elif game.game_state == "account_edit":
-            submit_account_edit(game)
+        button = get_account_focused_button(game)
+        if button:
+            activate_account_button(game, button)
+            return
+        if game.game_state in ("account_login", "account_signup", "account_edit"):
+            move_account_focus(game, 1)
         elif game.game_state == "account_mypage":
+            activate_account_button(game, "edit")
+        return
+
+
+def activate_account_button(game, button_name):
+    if game.game_state == "account_login":
+        if button_name == "login":
+            submit_account_login(game)
+        elif button_name == "signup":
+            open_account_signup(game)
+        elif button_name == "back":
             close_account_screen(game)
         return
+
+    if game.game_state == "account_signup":
+        if button_name == "submit":
+            submit_account_signup(game)
+        elif button_name == "back":
+            open_account_login(game)
+        return
+
+    if game.game_state == "account_mypage":
+        if button_name == "edit":
+            open_account_edit(game)
+        elif button_name == "back":
+            close_account_screen(game)
+        return
+
+    if game.game_state == "account_edit":
+        if button_name == "save":
+            submit_account_edit(game)
+        elif button_name == "back":
+            game.game_state = "account_mypage" if account_store.current_user(game) else "account_login"
 
 
 # 일시정지 메뉴에서 선택한 항목을 실행합니다.
@@ -791,7 +858,7 @@ def handle_key_down(game, event):
             actors.confirm_score_name(game)
             return
         text = getattr(event, "unicode", "")
-        if text and text.isprintable():
+        if text and text.isascii() and text.isprintable():
             append_score_name_text(game, text)
             game.score_last_key_text = text
             game.score_last_key_text_ms = pygame.time.get_ticks()
@@ -1155,39 +1222,48 @@ def handle_account_mouse_down(game, pos):
     buttons = layout_info.get("buttons", {})
     if game.game_state == "account_login":
         if buttons.get("login") and buttons["login"].collidepoint(pos):
+            focus_account_button(game, "login")
             assets.play_stage_sound(game, "shoot", 0.45)
             submit_account_login(game)
             return
         if buttons.get("signup") and buttons["signup"].collidepoint(pos):
+            focus_account_button(game, "signup")
             assets.play_stage_sound(game, "shoot", 0.45)
             open_account_signup(game)
             return
         if buttons.get("back") and buttons["back"].collidepoint(pos):
+            focus_account_button(game, "back")
             close_account_screen(game)
             return
 
     if game.game_state == "account_signup":
         if buttons.get("submit") and buttons["submit"].collidepoint(pos):
+            focus_account_button(game, "submit")
             assets.play_stage_sound(game, "shoot", 0.45)
             submit_account_signup(game)
             return
         if buttons.get("back") and buttons["back"].collidepoint(pos):
+            focus_account_button(game, "back")
             open_account_login(game)
             return
 
     if game.game_state == "account_mypage":
         if buttons.get("edit") and buttons["edit"].collidepoint(pos):
+            focus_account_button(game, "edit")
             assets.play_stage_sound(game, "shoot", 0.45)
             open_account_edit(game)
             return
         if buttons.get("back") and buttons["back"].collidepoint(pos):
+            focus_account_button(game, "back")
             close_account_screen(game)
             return
 
     if game.game_state == "account_edit":
         if buttons.get("save") and buttons["save"].collidepoint(pos):
+            focus_account_button(game, "save")
             assets.play_stage_sound(game, "shoot", 0.45)
             submit_account_edit(game)
             return
         if buttons.get("back") and buttons["back"].collidepoint(pos):
+            focus_account_button(game, "back")
             game.game_state = "account_mypage" if account_store.current_user(game) else "account_login"
