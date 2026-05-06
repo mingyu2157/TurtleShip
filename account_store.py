@@ -4,12 +4,21 @@
 #   로그인/회원가입, 캠페인 진행도, 점수 경쟁 최고점수와 랭킹 저장을 이 파일에 모읍니다.
 import hashlib
 from io import BytesIO
+import json
 import os
 import secrets
+import sys
 import time
 from datetime import datetime
+from urllib import error as urlerror
+from urllib import parse as urlparse
+from urllib import request as urlrequest
 
-from PIL import Image, ImageOps
+try:
+    from PIL import Image, ImageOps
+except ModuleNotFoundError:
+    Image = None
+    ImageOps = None
 
 from stages import STAGE_MAX
 
@@ -20,6 +29,9 @@ try:
 except ModuleNotFoundError:
     mysql = None
     MySQLError = Exception
+
+
+from text_utils import normalize_korean_text
 
 
 DEFAULT_PROFILE_IMAGE_KEY = "account_profile_icon"
@@ -34,6 +46,8 @@ MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
 _schema_ready = False
 _last_error = ""
 _schema_retry_after = 0.0
+_api_access_token = ""
+API_PATH_DOMAINS = {"daviya.kr", "www.daviya.kr"}
 
 
 class AccountStoreError(Exception):
@@ -47,6 +61,255 @@ def set_last_error(message):
 
 def get_last_error():
     return _last_error
+
+
+def get_api_base_url():
+    configured = normalize_api_base_url(os.getenv("TURTLESHIP_API_BASE_URL", ""))
+    if configured:
+        return configured
+    if is_web_platform():
+        return "/api"
+    return ""
+
+
+def use_api_store():
+    return bool(get_api_base_url())
+
+
+def is_web_platform():
+    return sys.platform == "emscripten"
+
+
+def normalize_api_base_url(value):
+    base_url = str(value or "").strip().rstrip("/")
+    if not base_url:
+        return ""
+    if base_url.startswith("/"):
+        return base_url or "/api"
+
+    parsed = urlparse.urlsplit(base_url)
+    if parsed.scheme in ("http", "https") and parsed.netloc:
+        host = parsed.hostname.lower() if parsed.hostname else ""
+        path = parsed.path.strip("/")
+        if host in API_PATH_DOMAINS and not path:
+            parsed = parsed._replace(path="/api")
+            return urlparse.urlunsplit(parsed).rstrip("/")
+
+    return base_url
+
+
+def get_api_timeout():
+    try:
+        return max(1.0, float(os.getenv("TURTLESHIP_API_TIMEOUT", "10")))
+    except ValueError:
+        return 10.0
+
+
+def api_url(path):
+    return f"{get_api_base_url()}/{path.lstrip('/')}"
+
+
+def api_token_from_profile(profile):
+    if not profile:
+        return ""
+    return profile.get("_access_token") or profile.get("access_token") or _api_access_token
+
+
+def api_token_from_game(game):
+    token = getattr(game, "account_access_token", "")
+    if token:
+        return token
+    return api_token_from_profile(current_user(game))
+
+
+def parse_api_error(raw, status_code=None):
+    if not raw:
+        return "FastAPI 응답을 받지 못했습니다."
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return "FastAPI 응답을 읽지 못했습니다."
+
+    stripped = text.strip()
+    lowered = stripped.lower()
+    if "<html" in lowered or "<!doctype" in lowered:
+        if status_code == 404 or "404 not found" in lowered:
+            return "API 주소를 찾지 못했습니다. TURTLESHIP_API_BASE_URL에 /api가 붙어 있는지 확인하세요."
+        if status_code == 500 or "500 internal server error" in lowered:
+            return "서버에서 500 오류가 났습니다. Web1/Web2의 FastAPI와 Nginx /api 설정을 확인하세요."
+        return "FastAPI가 아닌 웹페이지 응답을 받았습니다. API 주소와 Nginx /api 설정을 확인하세요."
+
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return stripped[:200] or "FastAPI 요청 실패"
+
+    detail = payload.get("detail")
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, list):
+        messages = []
+        for item in detail:
+            if isinstance(item, dict):
+                messages.append(str(item.get("msg") or item.get("detail") or item))
+            else:
+                messages.append(str(item))
+        return ", ".join(messages) or "FastAPI 요청 실패"
+    return str(detail or payload or "FastAPI 요청 실패")
+
+
+def api_request(method, path, payload=None, token="", body=None, content_type="application/json", parse_json=True):
+    headers = {}
+    data = body
+    if payload is not None:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    if content_type:
+        headers["Content-Type"] = content_type
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    if is_web_platform():
+        return browser_api_request(method, path, data, headers, parse_json)
+
+    try:
+        req = urlrequest.Request(api_url(path), data=data, headers=headers, method=method)
+        with urlrequest.urlopen(req, timeout=get_api_timeout()) as response:
+            raw = response.read()
+            if not parse_json:
+                return raw, response.headers, ""
+            if not raw:
+                return {}, response.headers, ""
+            try:
+                return json.loads(raw.decode("utf-8")), response.headers, ""
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return None, {}, parse_api_error(raw)
+    except urlerror.HTTPError as err:
+        return None, {}, parse_api_error(err.read(), err.code)
+    except (urlerror.URLError, TimeoutError, OSError) as err:
+        return None, {}, f"FastAPI 연결 실패: {err}"
+
+
+def browser_api_request(method, path, data=None, headers=None, parse_json=True):
+    try:
+        from js import XMLHttpRequest
+    except ModuleNotFoundError as err:
+        return None, {}, f"브라우저 HTTP 기능을 사용할 수 없습니다: {err}"
+
+    xhr = XMLHttpRequest.new()
+    xhr.open(method, api_url(path), False)
+    for key, value in (headers or {}).items():
+        xhr.setRequestHeader(key, value)
+
+    if isinstance(data, bytes):
+        data = data.decode("utf-8")
+
+    try:
+        xhr.send(data)
+    except Exception as err:
+        return None, {}, f"FastAPI 연결 실패: {err}"
+
+    status = int(xhr.status or 0)
+    raw_text = str(xhr.responseText or "")
+    if status < 200 or status >= 300:
+        return None, {}, parse_api_error(raw_text.encode("utf-8"), status)
+    if not parse_json:
+        return raw_text.encode("utf-8"), {}, ""
+    if not raw_text:
+        return {}, {}, ""
+    try:
+        return json.loads(raw_text), {}, ""
+    except json.JSONDecodeError:
+        return None, {}, parse_api_error(raw_text.encode("utf-8"))
+
+
+def normalize_api_profile(user, token=""):
+    if not isinstance(user, dict):
+        return None
+    profile = {
+        "id": int(user.get("id", 0)),
+        "login_id": str(user.get("login_id", "")),
+        "nickname": clean_nickname(user.get("nickname", "")),
+        "profile_image_key": user.get("profile_image_key") or DEFAULT_PROFILE_IMAGE_KEY,
+        "profile_image_data": None,
+        "profile_image_mime": user.get("profile_image_mime") or "image/png",
+        "unlocked_stage_count": int(user.get("unlocked_stage_count", 1)),
+        "cleared_stage_count": int(user.get("cleared_stage_count", 0)),
+        "best_score": int(user.get("best_score", 0)),
+    }
+    if token:
+        profile["_access_token"] = token
+    return profile
+
+
+def load_api_profile_image(token):
+    if not token:
+        return None, None, ""
+    raw, headers, message = api_request("GET", "/users/me/profile-image", token=token, content_type="", parse_json=False)
+    if message:
+        if "프로필 이미지가 없습니다" in message:
+            return None, None, ""
+        return None, None, message
+    return raw, headers.get("Content-Type") or "image/png", ""
+
+
+def attach_api_profile_image(profile, has_profile_image):
+    if not profile or not has_profile_image:
+        return profile, ""
+    if is_web_platform():
+        return profile, ""
+    token = api_token_from_profile(profile)
+    image_data, image_mime, message = load_api_profile_image(token)
+    if message:
+        return profile, message
+    profile["profile_image_data"] = image_data
+    profile["profile_image_mime"] = image_mime or "image/png"
+    return profile, ""
+
+
+def profile_from_auth_response(payload):
+    global _api_access_token
+    if not isinstance(payload, dict):
+        return None, "FastAPI 응답 형식이 올바르지 않습니다."
+    token = payload.get("access_token") or ""
+    user = payload.get("user") or {}
+    profile = normalize_api_profile(user, token)
+    if not profile or not token:
+        return None, "FastAPI 로그인 응답을 읽지 못했습니다."
+    _api_access_token = token
+    profile, message = attach_api_profile_image(profile, bool(user.get("has_profile_image")))
+    set_last_error(message)
+    return profile, ""
+
+
+def upload_api_profile_image(token, image_data, image_mime):
+    if is_web_platform():
+        return None, "웹 버전에서는 프로필 이미지 업로드를 지원하지 않습니다."
+    if not token or not image_data:
+        return None, ""
+    boundary = f"----TurtleShipProfile{secrets.token_hex(12)}"
+    mime = image_mime or "image/png"
+    parts = [
+        f"--{boundary}\r\n".encode("utf-8"),
+        b'Content-Disposition: form-data; name="image"; filename="profile.png"\r\n',
+        f"Content-Type: {mime}\r\n\r\n".encode("utf-8"),
+        image_data,
+        f"\r\n--{boundary}--\r\n".encode("utf-8"),
+    ]
+    body = b"".join(parts)
+    payload, _, message = api_request(
+        "PUT",
+        "/users/me/profile-image",
+        token=token,
+        body=body,
+        content_type=f"multipart/form-data; boundary={boundary}",
+    )
+    if message:
+        return None, message
+    profile = normalize_api_profile(payload, token)
+    if profile:
+        profile["profile_image_data"] = image_data
+        profile["profile_image_mime"] = mime
+    return profile, ""
 
 
 def get_db_config():
@@ -86,6 +349,10 @@ def connect(use_database=True):
 
 def ensure_schema():
     global _schema_ready, _schema_retry_after
+    if use_api_store():
+        _schema_ready = True
+        set_last_error("")
+        return True
     if _schema_ready:
         return True
     if _schema_retry_after and time.monotonic() < _schema_retry_after:
@@ -161,6 +428,8 @@ def ensure_column(cursor, table_name, column_name, definition):
 
 
 def load_profile_image(path):
+    if Image is None or ImageOps is None:
+        return None, "이미지 처리 패키지를 찾을 수 없습니다."
     if not path:
         return None, ""
 
@@ -221,9 +490,9 @@ def clean_login_id(login_id):
 
 
 def clean_nickname(nickname):
-    text = str(nickname or "").strip()
+    text = normalize_korean_text(nickname).strip()
     text = " ".join(text.split())
-    return text[:MAX_NICKNAME_LENGTH]
+    return normalize_korean_text(text)[:MAX_NICKNAME_LENGTH]
 
 
 def validate_credentials(login_id, password, nickname=None):
@@ -257,7 +526,7 @@ def normalize_profile(row):
     return {
         "id": int(row["id"]),
         "login_id": str(row["login_id"]),
-        "nickname": str(row["nickname"]),
+        "nickname": clean_nickname(row["nickname"]),
         "profile_image_key": row.get("profile_image_key") or DEFAULT_PROFILE_IMAGE_KEY,
         "profile_image_data": image_data,
         "profile_image_mime": row.get("profile_image_mime") or "image/png",
@@ -285,6 +554,17 @@ def login_user(login_id, password):
     login_id, password, _, message = validate_credentials(login_id, password)
     if message:
         return None, message
+    if use_api_store():
+        payload, _, message = api_request(
+            "POST",
+            "/auth/login",
+            {"login_id": login_id, "password": password},
+        )
+        if message:
+            set_last_error(message)
+            return None, message
+        return profile_from_auth_response(payload)
+
     if not ensure_schema():
         return None, f"MySQL 연결 실패: {get_last_error()}"
 
@@ -308,6 +588,30 @@ def signup_user(login_id, password, nickname, profile_image_data=None, profile_i
     login_id, password, nickname, message = validate_credentials(login_id, password, nickname)
     if message:
         return None, message
+    if use_api_store():
+        payload, _, message = api_request(
+            "POST",
+            "/auth/signup",
+            {"login_id": login_id, "password": password, "nickname": nickname},
+        )
+        if message:
+            set_last_error(message)
+            return None, message
+        profile, message = profile_from_auth_response(payload)
+        if message or not profile:
+            return profile, message
+        if profile_image_data:
+            uploaded, upload_message = upload_api_profile_image(
+                api_token_from_profile(profile),
+                profile_image_data,
+                profile_image_mime,
+            )
+            if uploaded:
+                profile = uploaded
+            elif upload_message:
+                set_last_error(upload_message)
+        return profile, ""
+
     if not ensure_schema():
         return None, f"MySQL 연결 실패: {get_last_error()}"
 
@@ -359,6 +663,33 @@ def update_user_profile(user_id, login_id, password, nickname, profile_image_dat
         return None, "닉네임을 입력하세요."
     if password and len(password) < MIN_PASSWORD_LENGTH:
         return None, "새 PW는 4자 이상이어야 합니다."
+    if use_api_store():
+        token = _api_access_token
+        if not token:
+            return None, "다시 로그인해 주세요."
+        payload = {"login_id": login_id, "nickname": nickname}
+        if password:
+            payload["password"] = password
+        response, _, message = api_request("PATCH", "/users/me", payload, token=token)
+        if message:
+            set_last_error(message)
+            return None, message
+        profile = normalize_api_profile(response, token)
+        if not profile:
+            return None, "FastAPI 프로필 응답을 읽지 못했습니다."
+        if update_profile_image:
+            uploaded, upload_message = upload_api_profile_image(token, profile_image_data, profile_image_mime)
+            if uploaded:
+                profile = uploaded
+            elif upload_message:
+                set_last_error(upload_message)
+                return None, upload_message
+        else:
+            profile, image_message = attach_api_profile_image(profile, bool(response.get("has_profile_image")))
+            if image_message:
+                set_last_error(image_message)
+        return profile, ""
+
     if not ensure_schema():
         return None, f"MySQL 연결 실패: {get_last_error()}"
 
@@ -389,6 +720,14 @@ def update_user_profile(user_id, login_id, password, nickname, profile_image_dat
                     """,
                     (login_id, nickname, *image_args, user_id),
                 )
+            cursor.execute(
+                """
+                UPDATE score_entries
+                SET nickname = %s
+                WHERE user_id = %s
+                """,
+                (nickname, user_id),
+            )
             connection.commit()
             cursor.execute(
                 """
@@ -413,7 +752,11 @@ def update_user_profile(user_id, login_id, password, nickname, profile_image_dat
 
 
 def apply_profile_to_game(game, profile):
+    global _api_access_token
     game.account_user = profile
+    if profile.get("_access_token"):
+        _api_access_token = profile["_access_token"]
+        game.account_access_token = profile["_access_token"]
     game.score_nickname = profile["nickname"]
     game.unlocked_stage_count = profile["unlocked_stage_count"]
     game.cleared_stage_count = profile["cleared_stage_count"]
@@ -433,6 +776,20 @@ def load_current_user_progress(game):
     user = current_user(game)
     if not user:
         return None
+    if use_api_store():
+        payload, _, message = api_request("GET", "/progress", token=api_token_from_game(game))
+        if message:
+            set_last_error(message)
+            return {
+                "unlocked_stage_count": user["unlocked_stage_count"],
+                "cleared_stage_count": user["cleared_stage_count"],
+            }
+        user["unlocked_stage_count"] = int(payload.get("unlocked_stage_count", user["unlocked_stage_count"]))
+        user["cleared_stage_count"] = int(payload.get("cleared_stage_count", user["cleared_stage_count"]))
+        return {
+            "unlocked_stage_count": user["unlocked_stage_count"],
+            "cleared_stage_count": user["cleared_stage_count"],
+        }
     return {
         "unlocked_stage_count": user["unlocked_stage_count"],
         "cleared_stage_count": user["cleared_stage_count"],
@@ -441,11 +798,28 @@ def load_current_user_progress(game):
 
 def save_current_user_progress(game, progress):
     user = current_user(game)
-    if not user or not ensure_schema():
+    if not user:
         return False
 
     unlocked = max(1, min(STAGE_MAX, int(progress.get("unlocked_stage_count", 1))))
     cleared = max(0, min(STAGE_MAX, int(progress.get("cleared_stage_count", 0))))
+    if use_api_store():
+        payload, _, message = api_request(
+            "PUT",
+            "/progress",
+            {"unlocked_stage_count": unlocked, "cleared_stage_count": cleared},
+            token=api_token_from_game(game),
+        )
+        if message:
+            set_last_error(message)
+            return False
+        user["unlocked_stage_count"] = int(payload.get("unlocked_stage_count", unlocked))
+        user["cleared_stage_count"] = int(payload.get("cleared_stage_count", cleared))
+        return True
+
+    if not ensure_schema():
+        return False
+
     connection = None
     try:
         with connect(True) as connection:
@@ -468,6 +842,22 @@ def save_current_user_progress(game, progress):
 
 
 def load_scores():
+    if use_api_store():
+        payload, _, message = api_request("GET", "/scores", content_type="")
+        if message:
+            set_last_error(message)
+            return None
+        entries = payload.get("entries", []) if isinstance(payload, dict) else []
+        return [
+            {
+                "nickname": clean_nickname(entry.get("nickname", "")),
+                "score": max(0, int(entry.get("score", 0))),
+                "date": str(entry.get("date") or ""),
+            }
+            for entry in entries
+            if isinstance(entry, dict)
+        ]
+
     if not ensure_schema():
         return None
 
@@ -496,13 +886,38 @@ def load_scores():
 
 
 def submit_score(nickname, score, game=None):
-    if not ensure_schema():
-        return None
-
     try:
         score_value = max(0, int(score))
     except (TypeError, ValueError):
         score_value = 0
+
+    if use_api_store():
+        user = current_user(game) if game is not None else None
+        nickname = clean_nickname(user["nickname"] if user else nickname) or "무명"
+        payload, _, message = api_request(
+            "POST",
+            "/scores",
+            {"nickname": nickname, "score": score_value},
+            token=api_token_from_game(game) if game is not None else "",
+        )
+        if message:
+            set_last_error(message)
+            return None
+        entries = [
+            {
+                "nickname": clean_nickname(entry.get("nickname", "")),
+                "score": max(0, int(entry.get("score", 0))),
+                "date": str(entry.get("date") or ""),
+            }
+            for entry in payload.get("entries", [])
+            if isinstance(entry, dict)
+        ]
+        if user:
+            user["best_score"] = max(int(user.get("best_score", 0)), score_value)
+        return entries, payload.get("rank")
+
+    if not ensure_schema():
+        return None
 
     user = current_user(game) if game is not None else None
     nickname = clean_nickname(user["nickname"] if user else nickname) or "무명"

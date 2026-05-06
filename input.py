@@ -27,6 +27,12 @@ import skills
 import ui
 from settings import MIN_PAD_HEIGHT, MIN_PAD_WIDTH
 from stages import STAGE_MAX
+from text_utils import normalize_korean_text
+
+
+ACCOUNT_MOUSE_BLOCK_MS = 280
+MENU_TRANSITION_MOUSE_BLOCK_MS = 450
+MENU_BUTTON_ORDER = ("start", "login")
 
 
 TEXT_INPUT_STATES = {"score_name_input", "account_login", "account_signup", "account_edit"}
@@ -89,6 +95,8 @@ def handle_event(game, event):
 
     if event.type == pygame.MOUSEBUTTONDOWN:
         if event.button == 1:
+            if is_mouse_click_blocked(game):
+                return
             handle_mouse_down(game, event.pos)
         elif event.button in (4, 5):
             handle_mouse_wheel(game, 1 if event.button == 4 else -1)
@@ -131,20 +139,22 @@ def handle_mouse_motion(game, pos):
 
     if game.game_state in ("account_login", "account_signup", "account_mypage", "account_edit"):
         layout_info = ui.get_account_layout(game, game.game_state)
-        profile_rect = layout_info.get("profile")
-        over_profile = profile_rect is not None and get_account_profile_click_rect(profile_rect).collidepoint(pos)
-        over_clickable = over_profile or any(rect.collidepoint(pos) for rect in layout_info.get("buttons", {}).values())
-        set_menu_cursor(over_clickable)
+        items = ui.get_account_focus_items(layout_info, game.game_state)
+        hovered_index = ui.get_account_hovered_focus_index(layout_info, game.game_state, pos, items)
+        hovered_item = items[hovered_index] if hovered_index is not None else None
+        if hovered_index is not None:
+            game.account_focus_index = hovered_index
+        set_account_cursor(
+            hovered_item is not None and hovered_item["kind"] in ("button", "profile"),
+            hovered_item is not None and hovered_item["kind"] == "field",
+        )
         return
 
     if game.game_state == "menu":
-        over_start = layout.get_start_button_rect(game).collidepoint(pos)
-        over_login = layout.get_login_button_rect(game).collidepoint(pos)
-        if over_start:
-            game.menu_select_index = 0
-        elif over_login:
-            game.menu_select_index = 1
-        set_menu_cursor(over_start or over_login)
+        hovered_button = get_menu_button_at(game, pos)
+        if hovered_button:
+            game.menu_select_index = get_menu_button_index(hovered_button)
+        set_menu_cursor(hovered_button is not None)
         return
 
     if game.game_state == "mode_select":
@@ -199,6 +209,26 @@ def set_menu_cursor(over_clickable):
         pass
 
 
+def set_account_cursor(over_clickable, over_text=False):
+    try:
+        if over_text and hasattr(pygame, "SYSTEM_CURSOR_IBEAM"):
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_IBEAM)
+        elif over_clickable and hasattr(pygame, "SYSTEM_CURSOR_HAND"):
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
+        elif hasattr(pygame, "SYSTEM_CURSOR_ARROW"):
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+    except pygame.error:
+        pass
+
+
+def block_mouse_clicks(game, duration_ms=ACCOUNT_MOUSE_BLOCK_MS):
+    game.mouse_click_block_until_ms = pygame.time.get_ticks() + duration_ms
+
+
+def is_mouse_click_blocked(game):
+    return pygame.time.get_ticks() < getattr(game, "mouse_click_block_until_ms", 0)
+
+
 def update_choice_focus_from_mouse(game, pos, rects):
     for index, rect in enumerate(rects):
         if rect.collidepoint(pos):
@@ -241,6 +271,24 @@ def open_mode_select(game):
     game.message_text = ""
     game.message_timer = 0
     assets.play_menu_music(game)
+    block_mouse_clicks(game, MENU_TRANSITION_MOUSE_BLOCK_MS)
+
+
+def get_menu_button_index(button_name):
+    try:
+        return MENU_BUTTON_ORDER.index(button_name)
+    except ValueError:
+        return 0
+
+
+def get_selected_menu_button(game):
+    index = max(0, min(getattr(game, "menu_select_index", 0), len(MENU_BUTTON_ORDER) - 1))
+    game.menu_select_index = index
+    return MENU_BUTTON_ORDER[index]
+
+
+def move_menu_selection(game, direction):
+    game.menu_select_index = (getattr(game, "menu_select_index", 0) + direction) % len(MENU_BUTTON_ORDER)
 
 
 def activate_mode_selection(game, index):
@@ -278,22 +326,12 @@ def append_score_name_text(game, text):
     if not text:
         return
 
-    current = getattr(game, "score_name_input", "")
-    for char in str(text):
-        if char in "\r\n\t":
-            continue
-        if len(current) >= scoreboard.MAX_NICKNAME_LENGTH:
-            break
-        current += char
-    game.score_name_input = current
-
-
-def account_field_names(game):
-    if game.game_state == "account_login":
-        return ("login_id", "password")
-    if game.game_state in ("account_signup", "account_edit"):
-        return ("nickname", "login_id", "password")
-    return ()
+    game.score_name_input = append_limited_text(
+        getattr(game, "score_name_input", ""),
+        text,
+        scoreboard.MAX_NICKNAME_LENGTH,
+        normalize=True,
+    )
 
 
 def remember_account_previous_state(game):
@@ -314,6 +352,7 @@ def open_account_login(game):
     game.account_message_ok = False
     game.game_state = "account_login"
     assets.play_menu_music(game)
+    block_mouse_clicks(game)
 
 
 def open_account_signup(game):
@@ -326,6 +365,7 @@ def open_account_signup(game):
     game.account_profile_upload_mime = None
     game.account_profile_upload_changed = False
     game.game_state = "account_signup"
+    block_mouse_clicks(game)
 
 
 def open_account_mypage(game):
@@ -333,8 +373,10 @@ def open_account_mypage(game):
     game.account_focus_index = 0
     game.account_message_text = ""
     game.account_message_ok = False
+    game.account_focus_index = 0
     game.game_state = "account_mypage"
     assets.play_menu_music(game)
+    block_mouse_clicks(game)
 
 
 def open_account_edit(game):
@@ -355,9 +397,11 @@ def open_account_edit(game):
     game.account_profile_upload_mime = None
     game.account_profile_upload_changed = False
     game.game_state = "account_edit"
+    block_mouse_clicks(game)
 
 
 def close_account_screen(game):
+    block_mouse_clicks(game)
     destination = getattr(game, "account_previous_state", "menu")
     if destination in ("account_login", "account_signup", "account_mypage", "account_edit", "play"):
         destination = "menu"
@@ -376,64 +420,117 @@ def close_account_screen(game):
 
 
 def handle_account_text_input(game, text):
-    fields = account_field_names(game)
-    if not fields:
+    field = get_focused_account_field(game)
+    if not field:
         return
-    focus_index = getattr(game, "account_focus_index", 0)
-    if focus_index >= len(fields):
-        return
-    field = fields[max(0, min(focus_index, len(fields) - 1))]
     value = getattr(game, "account_form", {}).get(field, "")
     max_length = account_store.MAX_NICKNAME_LENGTH if field == "nickname" else account_store.MAX_LOGIN_ID_LENGTH
     if field == "password":
         max_length = 32
-    for char in text:
+    game.account_form[field] = append_limited_text(value, text, max_length, normalize=field == "nickname")
+
+
+def append_limited_text(value, text, max_length, normalize=False):
+    value = str(value or "")
+    for char in str(text or ""):
         if char in "\r\n\t":
             continue
-        if len(value) >= max_length:
+        candidate = f"{value}{char}"
+        if normalize:
+            candidate = normalize_korean_text(candidate)
+        if len(candidate) > max_length:
             break
-        value += char
-    game.account_form[field] = value
+        value = candidate
+    return value
 
 
 def move_account_focus(game, direction):
-    target_count = get_account_focus_count(game)
-    if target_count <= 0:
+    items = get_account_focus_items(game)
+    if not items:
         return
-    game.account_focus_index = (getattr(game, "account_focus_index", 0) + direction) % target_count
+    game.account_focus_index = (getattr(game, "account_focus_index", 0) + direction) % len(items)
 
 
-def get_account_button_names(game):
+def get_account_focus_items(game):
     layout_info = ui.get_account_layout(game, game.game_state)
-    return tuple(layout_info.get("buttons", {}).keys())
+    return ui.get_account_focus_items(layout_info, game.game_state)
 
 
-def get_account_focus_count(game):
-    return len(account_field_names(game)) + len(get_account_button_names(game))
+def get_account_focus_item(game):
+    items = get_account_focus_items(game)
+    if not items:
+        return None
+    return items[max(0, min(getattr(game, "account_focus_index", 0), len(items) - 1))]
 
 
-def get_account_focused_field(game):
-    fields = account_field_names(game)
-    focus_index = getattr(game, "account_focus_index", 0)
-    if 0 <= focus_index < len(fields):
-        return fields[focus_index]
+def get_focused_account_field(game):
+    item = get_account_focus_item(game)
+    if item and item["kind"] == "field":
+        return item["name"]
     return None
 
 
-def get_account_focused_button(game):
-    fields = account_field_names(game)
-    focus_index = getattr(game, "account_focus_index", 0)
-    button_index = focus_index - len(fields)
-    buttons = get_account_button_names(game)
-    if 0 <= button_index < len(buttons):
-        return buttons[button_index]
-    return None
+def activate_account_profile(game):
+    assets.play_stage_sound(game, "shoot", 0.45)
+    if game.game_state == "account_mypage":
+        open_account_edit(game)
+        return
+    if game.game_state in ("account_signup", "account_edit"):
+        select_account_profile_image(game)
 
 
-def focus_account_button(game, button_name):
-    buttons = get_account_button_names(game)
-    if button_name in buttons:
-        game.account_focus_index = len(account_field_names(game)) + buttons.index(button_name)
+def activate_account_button(game, button_name):
+    assets.play_stage_sound(game, "shoot", 0.45)
+    if game.game_state == "account_login":
+        if button_name == "login":
+            submit_account_login(game)
+        elif button_name == "signup":
+            open_account_signup(game)
+        elif button_name == "back":
+            close_account_screen(game)
+        return
+
+    if game.game_state == "account_signup":
+        if button_name == "submit":
+            submit_account_signup(game)
+        elif button_name == "back":
+            open_account_login(game)
+        return
+
+    if game.game_state == "account_mypage":
+        if button_name == "edit":
+            open_account_edit(game)
+        elif button_name == "back":
+            close_account_screen(game)
+        return
+
+    if game.game_state == "account_edit":
+        if button_name == "save":
+            submit_account_edit(game)
+        elif button_name == "back":
+            game.game_state = "account_mypage" if account_store.current_user(game) else "account_login"
+            block_mouse_clicks(game)
+
+
+def submit_account_from_focused_field(game):
+    if game.game_state == "account_login":
+        submit_account_login(game)
+    elif game.game_state == "account_signup":
+        submit_account_signup(game)
+    elif game.game_state == "account_edit":
+        submit_account_edit(game)
+
+
+def activate_account_focus_item(game):
+    item = get_account_focus_item(game)
+    if not item:
+        return
+    if item["kind"] == "profile":
+        activate_account_profile(game)
+    elif item["kind"] == "button":
+        activate_account_button(game, item["name"])
+    elif item["kind"] == "field":
+        submit_account_from_focused_field(game)
 
 
 def submit_account_login(game):
@@ -474,6 +571,7 @@ def submit_account_edit(game):
         open_account_login(game)
         return
     form = getattr(game, "account_form", {})
+    old_nickname = user.get("nickname", "")
     profile, message = account_store.update_user_profile(
         user["id"],
         form.get("login_id", ""),
@@ -485,6 +583,7 @@ def submit_account_edit(game):
     )
     if profile:
         account_store.apply_profile_to_game(game, profile)
+        rename_cached_leaderboard_nickname(game, old_nickname, profile.get("nickname", ""))
         game.account_message_text = "저장 완료"
         game.account_message_ok = True
         game.game_state = "account_mypage"
@@ -496,6 +595,8 @@ def submit_account_edit(game):
 def select_account_profile_image(game):
     path = pick_profile_image_file()
     if not path:
+        game.account_message_text = "프로필 사진 파일을 선택하지 않았습니다."
+        game.account_message_ok = False
         return
 
     raw, source_size, message = account_store.load_profile_image_preview(path)
@@ -524,9 +625,11 @@ def start_account_profile_crop(game, path, surface, source_size):
     game.account_crop_box = [(width - side) / 2, (height - side) / 2, float(side)]
     game.account_crop_dragging = False
     game.account_crop_drag_last = None
+    game.account_crop_focus_index = 0
     game.account_message_text = ""
     game.account_message_ok = False
     game.game_state = "account_profile_crop"
+    block_mouse_clicks(game)
 
 
 def clear_account_profile_crop(game):
@@ -546,6 +649,7 @@ def finish_account_profile_crop(game):
     previous_state = getattr(game, "account_crop_previous_state", "account_signup")
     clear_account_profile_crop(game)
     game.game_state = previous_state
+    block_mouse_clicks(game)
 
     if not image_data:
         game.account_message_text = message or "프로필 사진을 선택하지 못했습니다."
@@ -563,6 +667,7 @@ def cancel_account_profile_crop(game):
     previous_state = getattr(game, "account_crop_previous_state", "account_signup")
     clear_account_profile_crop(game)
     game.game_state = previous_state
+    block_mouse_clicks(game)
     game.account_message_text = "프로필 사진 선택 취소"
     game.account_message_ok = False
 
@@ -621,6 +726,10 @@ def get_account_crop_preview_scale(game):
 def handle_account_crop_mouse_motion(game, pos):
     layout_info = ui.get_account_profile_crop_layout(game)
     over_clickable = layout_info["confirm"].collidepoint(pos) or layout_info["cancel"].collidepoint(pos)
+    if layout_info["confirm"].collidepoint(pos):
+        game.account_crop_focus_index = 0
+    elif layout_info["cancel"].collidepoint(pos):
+        game.account_crop_focus_index = 1
     crop_rect = ui.get_account_crop_screen_rect(game, layout_info["preview"])
     over_crop = crop_rect.collidepoint(pos) or layout_info["preview"].collidepoint(pos)
     set_menu_cursor(over_clickable or over_crop)
@@ -642,10 +751,12 @@ def handle_account_crop_mouse_motion(game, pos):
 def handle_account_crop_mouse_down(game, pos):
     layout_info = ui.get_account_profile_crop_layout(game)
     if layout_info["confirm"].collidepoint(pos):
+        game.account_crop_focus_index = 0
         assets.play_stage_sound(game, "shoot", 0.45)
         finish_account_profile_crop(game)
         return
     if layout_info["cancel"].collidepoint(pos):
+        game.account_crop_focus_index = 1
         assets.play_stage_sound(game, "shoot", 0.45)
         cancel_account_profile_crop(game)
         return
@@ -665,7 +776,13 @@ def handle_account_crop_key_down(game, event):
         return
     if event.key == pygame.K_RETURN:
         assets.play_stage_sound(game, "shoot", 0.45)
-        finish_account_profile_crop(game)
+        if getattr(game, "account_crop_focus_index", 0) == 1:
+            cancel_account_profile_crop(game)
+        else:
+            finish_account_profile_crop(game)
+        return
+    if event.key == pygame.K_TAB:
+        game.account_crop_focus_index = (getattr(game, "account_crop_focus_index", 0) + 1) % 2
         return
     plus_keys = (pygame.K_EQUALS, getattr(pygame, "K_PLUS", pygame.K_EQUALS), getattr(pygame, "K_KP_PLUS", pygame.K_EQUALS))
     minus_keys = (pygame.K_MINUS, getattr(pygame, "K_UNDERSCORE", pygame.K_MINUS), getattr(pygame, "K_KP_MINUS", pygame.K_MINUS))
@@ -688,6 +805,15 @@ def handle_account_crop_key_down(game, event):
 
 
 def pick_profile_image_file():
+    if sys.platform == "darwin":
+        return pick_profile_image_file_macos()
+    return pick_profile_image_file_tk()
+
+
+def pick_profile_image_file_tk():
+    if sys.platform == "darwin":
+        return ""
+
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -699,6 +825,7 @@ def pick_profile_image_file():
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
+        root.update()
         return filedialog.askopenfilename(
             title="프로필 사진 선택",
             filetypes=(
@@ -716,62 +843,80 @@ def pick_profile_image_file():
                 pass
 
 
+def pick_profile_image_file_macos():
+    if sys.platform != "darwin":
+        return ""
+
+    script = (
+        'set selectedFile to choose file with prompt "프로필 사진 선택" '
+        'of type {"public.image"}\n'
+        "POSIX path of selectedFile"
+    )
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def get_account_profile_click_rect(profile_rect):
+    return ui.get_account_profile_hit_rect(profile_rect)
+
+
+def is_account_profile_click(layout_info, pos):
+    profile_button = layout_info.get("profile_button")
+    if profile_button and profile_button.collidepoint(pos):
+        return True
+
+    profile_rect = layout_info.get("profile")
+    return profile_rect is not None and get_account_profile_click_rect(profile_rect).collidepoint(pos)
+
+
+def rename_cached_leaderboard_nickname(game, old_nickname, new_nickname):
+    old_name = scoreboard.clean_nickname(old_nickname)
+    new_name = scoreboard.clean_nickname(new_nickname)
+    if old_name == new_name:
+        return
+
+    for attr_name in ("leaderboard_entries", "score_mode_leaderboard_snapshot"):
+        entries = getattr(game, attr_name, None)
+        if not entries:
+            continue
+        for entry in entries:
+            if entry.get("nickname") == old_name:
+                entry["nickname"] = new_name
+
+
 def handle_account_key_down(game, event):
     if event.key == pygame.K_ESCAPE:
         close_account_screen(game)
         return
-    if event.key in (pygame.K_TAB, pygame.K_DOWN):
+    if event.key == pygame.K_TAB:
+        move_account_focus(game, -1 if getattr(event, "mod", 0) & pygame.KMOD_SHIFT else 1)
+        return
+    if event.key in (pygame.K_DOWN, pygame.K_RIGHT):
         move_account_focus(game, 1)
         return
-    if event.key == pygame.K_UP:
+    if event.key in (pygame.K_UP, pygame.K_LEFT):
         move_account_focus(game, -1)
         return
     if event.key == pygame.K_BACKSPACE:
-        field = get_account_focused_field(game)
+        field = get_focused_account_field(game)
         if field:
             game.account_form[field] = getattr(game, "account_form", {}).get(field, "")[:-1]
         return
     if event.key == pygame.K_RETURN:
-        button = get_account_focused_button(game)
-        if button:
-            activate_account_button(game, button)
-            return
-        if game.game_state in ("account_login", "account_signup", "account_edit"):
-            move_account_focus(game, 1)
-        elif game.game_state == "account_mypage":
-            activate_account_button(game, "edit")
+        activate_account_focus_item(game)
         return
-
-
-def activate_account_button(game, button_name):
-    if game.game_state == "account_login":
-        if button_name == "login":
-            submit_account_login(game)
-        elif button_name == "signup":
-            open_account_signup(game)
-        elif button_name == "back":
-            close_account_screen(game)
-        return
-
-    if game.game_state == "account_signup":
-        if button_name == "submit":
-            submit_account_signup(game)
-        elif button_name == "back":
-            open_account_login(game)
-        return
-
-    if game.game_state == "account_mypage":
-        if button_name == "edit":
-            open_account_edit(game)
-        elif button_name == "back":
-            close_account_screen(game)
-        return
-
-    if game.game_state == "account_edit":
-        if button_name == "save":
-            submit_account_edit(game)
-        elif button_name == "back":
-            game.game_state = "account_mypage" if account_store.current_user(game) else "account_login"
 
 
 # 일시정지 메뉴에서 선택한 항목을 실행합니다.
@@ -804,12 +949,14 @@ def handle_key_down(game, event):
         return
 
     if game.game_state == "menu":
-        current_index = getattr(game, "menu_select_index", 0)
-        if event.key in (pygame.K_UP, pygame.K_w, pygame.K_DOWN, pygame.K_s):
-            game.menu_select_index = 1 if current_index == 0 else 0
+        if event.key in (pygame.K_LEFT, pygame.K_UP, pygame.K_a, pygame.K_w):
+            move_menu_selection(game, -1)
+            return
+        if event.key in (pygame.K_RIGHT, pygame.K_DOWN, pygame.K_d, pygame.K_s, pygame.K_TAB):
+            move_menu_selection(game, 1)
             return
         if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-            activate_menu_button(game, "login" if getattr(game, "menu_select_index", 0) == 1 else "start")
+            activate_menu_button(game, get_selected_menu_button(game))
             return
         if event.key == pygame.K_ESCAPE:
             pygame.quit()
@@ -1072,7 +1219,7 @@ def handle_mouse_down(game, pos):
         pressed_button = get_menu_button_at(game, pos)
         game.menu_pressed_button = pressed_button
         if pressed_button:
-            activate_menu_button(game, pressed_button)
+            game.menu_select_index = get_menu_button_index(pressed_button)
         return
 
     if game.game_state == "mode_select":
@@ -1191,6 +1338,7 @@ def get_menu_button_at(game, pos):
 
 def activate_menu_button(game, button_name):
     assets.play_stage_sound(game, "shoot", 0.45)
+    game.menu_select_index = get_menu_button_index(button_name)
     if button_name == "login":
         open_account_login(game)
     elif button_name == "start":
@@ -1205,65 +1353,23 @@ def handle_mouse_wheel(game, direction):
 
 def handle_account_mouse_down(game, pos):
     layout_info = ui.get_account_layout(game, game.game_state)
-    profile_rect = layout_info.get("profile")
-    if profile_rect and profile_rect.collidepoint(pos):
-        assets.play_stage_sound(game, "shoot", 0.45)
-        if game.game_state == "account_mypage":
-            open_account_edit(game)
-        select_account_profile_image(game)
+    items = ui.get_account_focus_items(layout_info, game.game_state)
+    hovered_index = ui.get_account_hovered_focus_index(layout_info, game.game_state, pos, items)
+    if hovered_index is not None:
+        game.account_focus_index = hovered_index
+
+    if is_account_profile_click(layout_info, pos):
+        activate_account_profile(game)
         return
 
     fields = layout_info.get("fields", [])
     for index, (_, rect) in enumerate(fields):
         if rect.collidepoint(pos):
-            game.account_focus_index = index
+            game.account_focus_index = hovered_index if hovered_index is not None else index
             return
 
     buttons = layout_info.get("buttons", {})
-    if game.game_state == "account_login":
-        if buttons.get("login") and buttons["login"].collidepoint(pos):
-            focus_account_button(game, "login")
-            assets.play_stage_sound(game, "shoot", 0.45)
-            submit_account_login(game)
+    for button_name, rect in buttons.items():
+        if rect.collidepoint(pos):
+            activate_account_button(game, button_name)
             return
-        if buttons.get("signup") and buttons["signup"].collidepoint(pos):
-            focus_account_button(game, "signup")
-            assets.play_stage_sound(game, "shoot", 0.45)
-            open_account_signup(game)
-            return
-        if buttons.get("back") and buttons["back"].collidepoint(pos):
-            focus_account_button(game, "back")
-            close_account_screen(game)
-            return
-
-    if game.game_state == "account_signup":
-        if buttons.get("submit") and buttons["submit"].collidepoint(pos):
-            focus_account_button(game, "submit")
-            assets.play_stage_sound(game, "shoot", 0.45)
-            submit_account_signup(game)
-            return
-        if buttons.get("back") and buttons["back"].collidepoint(pos):
-            focus_account_button(game, "back")
-            open_account_login(game)
-            return
-
-    if game.game_state == "account_mypage":
-        if buttons.get("edit") and buttons["edit"].collidepoint(pos):
-            focus_account_button(game, "edit")
-            assets.play_stage_sound(game, "shoot", 0.45)
-            open_account_edit(game)
-            return
-        if buttons.get("back") and buttons["back"].collidepoint(pos):
-            focus_account_button(game, "back")
-            close_account_screen(game)
-            return
-
-    if game.game_state == "account_edit":
-        if buttons.get("save") and buttons["save"].collidepoint(pos):
-            focus_account_button(game, "save")
-            assets.play_stage_sound(game, "shoot", 0.45)
-            submit_account_edit(game)
-            return
-        if buttons.get("back") and buttons["back"].collidepoint(pos):
-            focus_account_button(game, "back")
-            game.game_state = "account_mypage" if account_store.current_user(game) else "account_login"

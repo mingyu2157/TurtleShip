@@ -6,6 +6,7 @@ from datetime import datetime
 
 import account_store
 from settings import BASE_DIR
+from text_utils import normalize_korean_text
 
 
 SCOREBOARD_PATH = BASE_DIR / "scoreboard.json"
@@ -16,11 +17,11 @@ DEFAULT_NICKNAME = "무명"
 
 # 공백과 너무 긴 이름을 정리해서 저장/표시 규칙을 한곳에서 맞춥니다.
 def clean_nickname(nickname):
-    text = str(nickname or "").strip()
+    text = normalize_korean_text(nickname).strip()
     text = " ".join(text.split())
     if not text:
         text = DEFAULT_NICKNAME
-    return text[:MAX_NICKNAME_LENGTH]
+    return normalize_korean_text(text)[:MAX_NICKNAME_LENGTH]
 
 
 # 저장 파일 안의 이상한 데이터도 안전한 점수 기록 형태로 고쳐줍니다.

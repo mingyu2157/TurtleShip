@@ -229,23 +229,11 @@ def get_circle_rect(x, y, radius):
 
 
 # 보스에게 피해를 줍니다.
-# 보호막이 있으면 보호막부터 깎고, 남은 피해량만 체력에 적용합니다.
 def damage_boss(game, amount):
     if game.boss is None:
         return
 
-    remain = amount
-    if game.boss["shield"] > 0:
-        # 보호막이 있으면 체력보다 보호막을 먼저 깎습니다.
-        shield_damage = min(game.boss["shield"], remain)
-        game.boss["shield"] -= shield_damage
-        remain -= shield_damage
-        if game.boss["shield"] <= 0:
-            game.boss["restoreTimer"] = 0
-
-    if remain > 0:
-        # 보호막을 다 깎고 남은 피해량만 실제 체력에 들어갑니다.
-        game.boss["hp"] = max(0, game.boss["hp"] - remain)
+    game.boss["hp"] = max(0, game.boss["hp"] - amount)
 
 
 # 플레이어에게 피해를 줍니다.

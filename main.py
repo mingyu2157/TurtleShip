@@ -11,6 +11,7 @@
 # 공부 순서:
 #   처음 읽을 때는 Game 클래스 -> initGame() -> runGame() -> updateGame() 순서로 보면 됩니다.
 #   pygame 게임은 대부분 "상태 저장 -> 입력 처리 -> 상태 변경 -> 화면 그리기" 구조로 되어 있습니다.
+import os
 import sys
 
 
@@ -43,6 +44,26 @@ from settings import DEFAULT_PAD_HEIGHT, DEFAULT_PAD_WIDTH, FPS
 from stages import STAGES
 
 
+def load_game_env():
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "game.env")
+    if not os.path.exists(env_path):
+        return
+
+    try:
+        with open(env_path, "r", encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except OSError:
+        return
+
+
 # Game 클래스는 게임에서 계속 들고 다녀야 하는 상태를 한곳에 모아둔 상자입니다.
 # 예를 들어 player, enemies, bullets, score처럼 여러 파일에서 같이 써야 하는 값들이 여기에 있습니다.
 # 각 기능 파일은 game을 전달받아서 필요한 값만 읽거나 수정합니다.
@@ -51,6 +72,7 @@ class Game:
         # 화면 크기와 pygame 기본 객체입니다.
         # pad_width/pad_height는 현재 창 크기이고, screen은 실제로 그림이 그려지는 도화지입니다.
         # clock은 초당 프레임 수를 일정하게 맞추기 위해 사용합니다.
+        self.account_access_token = ""
         self.pad_width = DEFAULT_PAD_WIDTH
         self.pad_height = DEFAULT_PAD_HEIGHT
         self.screen = None
@@ -126,7 +148,11 @@ class Game:
         self.score_name_input = ""
         self.leaderboard_entries = []
         self.leaderboard_last_rank = None
+        self.leaderboard_sync_interval = 300.0
+        self.leaderboard_next_sync_at = 0.0
+        self.score_mode_leaderboard_snapshot = []
         self.account_user = None
+        self.account_access_token = ""
         self.account_previous_state = "menu"
         self.account_form = {"login_id": "", "password": "", "nickname": ""}
         self.account_focus_index = 0
@@ -135,6 +161,7 @@ class Game:
         self.account_profile_upload_bytes = None
         self.account_profile_upload_mime = None
         self.account_profile_upload_changed = False
+        self.account_crop_focus_index = 0
         self.account_crop_previous_state = "account_signup"
         self.account_crop_path = ""
         self.account_crop_surface = None
@@ -142,6 +169,7 @@ class Game:
         self.account_crop_box = None
         self.account_crop_dragging = False
         self.account_crop_drag_last = None
+        self.mouse_click_block_until_ms = 0
         self.hakikjin_unlocked = False
         self.shoot_cooldown = 0
         self.obstacle_spawn_timer = 0
@@ -230,6 +258,7 @@ def get_maximized_window_size():
 # pygame, 키 반복 설정, 창 생성, 이미지/사운드 로딩을 담당합니다.
 # "--windowed" 옵션이 없으면 전체화면이 아니라 "최대화된 창"으로 시작합니다.
 def initGame():
+    load_game_env()
     # pygame.init()은 pygame의 화면, 키보드, 소리 같은 내부 기능을 준비합니다.
     pygame.init()
     # 키를 꾹 누를 때 KEYDOWN이 반복 발생하지 않게 해서 Space 연타 규칙을 유지합니다.
