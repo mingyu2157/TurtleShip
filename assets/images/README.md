@@ -8,9 +8,13 @@ Place optional image files here. PNG, JPG, and JPEG are supported.
 - `main_menu.png`
 - `game_background.png`
 - `player.png`
+- `bullet.png`
 - `enemy.png`
 - `mini_boss.png`
-- `boss_room.png`
+- `ultimate_flash.png`
+- `skill_hakikjin_ship.png`
+- `skill_tanker_guard.png`
+- `skill_healer_aura.png`
 
 ## Per Stage
 
